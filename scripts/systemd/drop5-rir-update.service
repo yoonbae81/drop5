@@ -1,0 +1,11 @@
+[Unit]
+Description=Update RIR IP Mapping Data for Drop5
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory={{PROJECT_ROOT}}
+ExecStart={{PROJECT_ROOT}}/.venv/bin/python3 {{PROJECT_ROOT}}/scripts/update_rir_data.py
+
+[Install]
+WantedBy=default.target

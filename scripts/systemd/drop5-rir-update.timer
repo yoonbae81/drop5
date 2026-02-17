@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Drop5 RIR data update weekly
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+Unit=drop5-rir-update.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=drop5 File Sharing Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{PROJECT_ROOT}}
+Environment="PATH={{PROJECT_ROOT}}/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile={{PROJECT_ROOT}}/.env
+
+ExecStart={{PROJECT_ROOT}}/.venv/bin/gunicorn --bind 0.0.0.0:{{PORT}} --workers 4 src.main:app
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=drop5
+
+[Install]
+WantedBy=default.target
