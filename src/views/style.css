@@ -423,7 +423,7 @@ body {
     justify-content: center;
     text-align: center;
     width: 100%;
-    min-height: 350px;
+    min-height: 400px;
 }
 
 .empty-icon {
@@ -471,6 +471,7 @@ body {
     .file-list-section {
         width: 100%;
         padding: 0;
+        flex: 1;
     }
 
     #fileListContent {
