@@ -8,7 +8,7 @@
   "approve": "Godkend",
   "reject": "Afvis",
   "text_input": "Indtast tekst direkte",
-  "disclaimer": "Brugere bærer den eneste juridiske ansvarlighed for alt delt indhold. Deling af ulovlige materialer er strengt forbudt. Af sikkerhedsmæssige årsager og for at forhindre misbrug registreres IP-adresser og aktivitetslogge i 90 dage og slettes derefter.",
+  "disclaimer": "Brugere bærer juridisk ansvar for uploadede filer. Deling af ulovlige materialer er forbudt. Filer slettes inden for 5 minutter. For at forhindre misbrug af systemet gemmes IP-adresser og brugslogge i 90 dage og slettes derefter.",
   "no_files_yet": "Ingen filer endnu.",
   "link_copied": "Link kopieret!",
   "text_input_modal_title": "Indtast tekst",

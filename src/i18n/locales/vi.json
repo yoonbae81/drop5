@@ -8,7 +8,7 @@
   "approve": "Phê duyệt",
   "reject": "Từ chối",
   "text_input": "Nhập văn bản trực tiếp",
-  "disclaimer": "Người dùng chịu trách nhiệm pháp lý duy nhất cho tất cả nội dung được chia sẻ. Việc chia sẻ tài liệu bất hợp pháp bị cấm nghiêm ngặt. Vì lý do bảo mật và ngăn chặn lạm dụng, địa chỉ IP và nhật ký hoạt động được ghi lại trong 90 ngày và sau đó bị xóa.",
+  "disclaimer": "Người dùng chịu trách nhiệm pháp lý cho các tệp đã tải lên. Việc chia sẻ tài liệu bất hợp pháp bị cấm. Các tệp bị xóa trong vòng 5 phút. Để ngăn chặn lạm dụng hệ thống, địa chỉ IP và nhật ký sử dụng được lưu trong 90 ngày và sau đó bị xóa.",
   "no_files_yet": "Chưa có tệp nào.",
   "link_copied": "Đã sao chép liên kết!",
   "text_input_modal_title": "Nhập văn bản",

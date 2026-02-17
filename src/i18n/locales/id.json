@@ -8,7 +8,7 @@
   "approve": "Setujui",
   "reject": "Tolak",
   "text_input": "Masukkan teks secara langsung",
-  "disclaimer": "Pengguna menanggung tanggung jawab hukum tunggal untuk semua konten yang dibagikan. Berbagi materi ilegal sangat dilarang. Untuk keamanan dan mencegah penyalahgunaan, alamat IP dan log aktivitas dicatat selama 90 hari kemudian dihapus.",
+  "disclaimer": "Pengguna menanggung tanggung jawab hukum untuk file yang diunggah. Berbagi materi ilegal dilarang. File dihapus dalam 5 menit. Untuk mencegah penyalahgunaan sistem, alamat IP dan log penggunaan disimpan selama 90 hari kemudian dihapus.",
   "no_files_yet": "Belum ada file.",
   "link_copied": "Tautan disalin!",
   "text_input_modal_title": "Masukkan teks",

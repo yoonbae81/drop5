@@ -8,7 +8,7 @@
   "approve": "Jóváhagyás",
   "reject": "Elutasítás",
   "text_input": "Szöveg közvetlen bevitele",
-  "disclaimer": "A felhasználók viselik a kizárólagos jogi felelősséget minden megosztott tartalomért. Az illegális anyagok megosztása szigorúan tilos. Biztonsági okokból és a visszaélések megelőzése érdekében az IP-címeket és a tevékenységi naplókat 90 napig rögzítjük, majd törljük.",
+  "disclaimer": "A felhasználók viselik a jogi felelősséget a feltöltött fájlokért. Az illegális anyagok megosztása tilos. A fájlok 5 percen belül törlésre kerülnek. A rendszer visszaélésének megelőzése érdekében az IP-címeket és a használati naplókat 90 napig tároljuk, majd töröljük.",
   "no_files_yet": "Még nincsenek fájlok.",
   "link_copied": "Link másolva!",
   "text_input_modal_title": "Szöveg megadása",

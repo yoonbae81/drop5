@@ -8,7 +8,7 @@
   "approve": "Aprobar",
   "reject": "Rechazar",
   "text_input": "Ingresar texto directamente",
-  "disclaimer": "Los usuarios asumen la única responsabilidad legal de todo el contenido compartido. Está estrictamente prohibido compartir materiales ilegales. Por seguridad y para prevenir el abuso, se registran las direcciones IP y los registros de actividad durante 90 días y luego se eliminan.",
+  "disclaimer": "Los usuarios asumen la responsabilidad legal de los archivos subidos. Está prohibido compartir materiales ilegales. Los archivos se eliminan en 5 minutos. Para prevenir el abuso del sistema, las direcciones IP y los registros de uso se conservan durante 90 días y luego se eliminan.",
   "no_files_yet": "Aún no hay archivos.",
   "link_copied": "¡Enlace copiado!",
   "text_input_modal_title": "Ingresar texto",

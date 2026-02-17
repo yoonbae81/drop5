@@ -8,7 +8,7 @@
   "approve": "Schválit",
   "reject": "Odmítnout",
   "text_input": "Zadat text přímo",
-  "disclaimer": "Uživatelé nesou výhradní právní odpovědnost za veškerý sdílený obsah. Sdílení nelegálních materiálů je přísně zakázáno. Z bezpečnostních důvodů a pro prevenci zneužití jsou adresy IP a protokoly aktivit zaznamenávány po dobu 90 dnů a poté smazány.",
+  "disclaimer": "Uživatelé nesou právní odpovědnost za nahrané soubory. Sdílení nelegálních materiálů je zakázáno. Soubory jsou smazány do 5 minut. K prevenci zneužití systému jsou adresy IP a protokoly používání uchovávány 90 dnů a poté smazány.",
   "no_files_yet": "Zatím nejsou žádné soubory.",
   "link_copied": "Odkaz zkopírován!",
   "text_input_modal_title": "Zadejte text",

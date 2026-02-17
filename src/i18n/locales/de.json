@@ -8,7 +8,7 @@
   "approve": "Genehmigen",
   "reject": "Ablehnen",
   "text_input": "Text direkt eingeben",
-  "disclaimer": "Benutzer tragen die alleinige rechtliche Verantwortung für alle geteilten Inhalte. Das Teilen von illegalen Materialien ist streng untersagt. Aus Sicherheitsgründen und zur Missbrauchsverhinderung werden IP-Adressen und Aktivitätsprotokolle für 90 Tage aufgezeichnet und anschließend gelöscht.",
+  "disclaimer": "Benutzer tragen die rechtliche Verantwortung für hochgeladene Dateien. Das Teilen von illegalen Materialien ist untersagt. Dateien werden innerhalb von 5 Minuten gelöscht. Zur Verhinderung von Systemmissbrauch werden IP-Adressen und Nutzungsprotokolle 90 Tage lang gespeichert und anschließend gelöscht.",
   "no_files_yet": "Noch keine Dateien vorhanden.",
   "link_copied": "Link kopiert!",
   "text_input_modal_title": "Text eingeben",

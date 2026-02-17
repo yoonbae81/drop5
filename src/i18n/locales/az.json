@@ -8,7 +8,7 @@
   "approve": "Təsdiqlə",
   "reject": "Rədd et",
   "text_input": "Mətni birbaşa daxil edin",
-  "disclaimer": "İstifadəçilər bütün bölüşdürülmüş məzmun üçün yeganə hüquqi məsuliyyət daşıyır. Qanunsuz materialların paylaşılması ciddi qadağandır. Təhlükəsizlik və sui-istifadənin qarşısını almaq üçün, IP ünvanları və fəaliyyət jurnalları 90 gün qeyd olunur və sonra silinir.",
+  "disclaimer": "İstifadəçilər yüklənmiş fayllar üçün hüquqi məsuliyyət daşıyır. Qanunsuz materialların paylaşılması qadağandır. Fayllar 5 dəqiqə içində silinir. Sistemin sui-istifadəsinin qarşısını almaq üçün, IP ünvanları və istifadə jurnalları 90 gün qeyd olunur və sonra silinir.",
   "no_files_yet": "Hələ fayl yoxdur.",
   "link_copied": "Link kopyalandı!",
   "text_input_modal_title": "Mətn daxil et",

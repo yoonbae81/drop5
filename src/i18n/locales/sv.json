@@ -8,7 +8,7 @@
   "approve": "Godkänn",
   "reject": "Avvisa",
   "text_input": "Ange text direkt",
-  "disclaimer": "Användare bär det ensamma juridiska ansvaret för allt delat innehåll. Delning av olagliga materialer är strikt förbjudet. För säkerhet och för att förhindra missbruk registreras IP-adresser och aktivitetsloggar i 90 dagar och raderas därefter.",
+  "disclaimer": "Användare bär det juridiska ansvaret för uppladdade filer. Delning av olagliga materialer är förbjudet. Filer raderas inom 5 minuter. För att förhindra systemmissbruk sparas IP-adresser och användningsloggar i 90 dagar och raderas därefter.",
   "no_files_yet": "Inga filer än.",
   "link_copied": "Länk kopierad!",
   "text_input_modal_title": "Ange text",

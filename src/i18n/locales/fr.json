@@ -8,7 +8,7 @@
   "approve": "Approuver",
   "reject": "Rejeter",
   "text_input": "Saisir du texte directement",
-  "disclaimer": "Les utilisateurs assument la seule responsabilité légale de tout le contenu partagé. Le partage de matériaux illégaux est strictement interdit. Pour des raisons de sécurité et pour prévenir les abus, les adresses IP et les journaux d'activité sont enregistrés pendant 90 jours puis supprimés.",
+  "disclaimer": "Les utilisateurs assument la responsabilité légale des fichiers téléchargés. Le partage de matériaux illégaux est interdit. Les fichiers sont supprimés dans les 5 minutes. Pour prévenir les abus du système, les adresses IP et les journaux d'utilisation sont conservés pendant 90 jours puis supprimés.",
   "no_files_yet": "Aucun fichier pour le moment.",
   "link_copied": "Lien copié!",
   "text_input_modal_title": "Saisir du texte",
