@@ -8,7 +8,7 @@
   "approve": "Odobri",
   "reject": "Zavrni",
   "text_input": "Neposredno vnesite besedilo",
-  "disclaimer": "Uporabniki nosijo edino pravno odgovornost za ves vsebinsko vsebino. Deljenje nezakonitih materialov je strogo prepovedano. Zaradi varnosti in preprečevanja zlorabe se IP naslovi in dnevniki aktivnosti zapisujejo 90 dni, nato pa se izbrišejo.",
+  "disclaimer": "Uporabniki nosijo edino pravno odgovornost za ves vsebinsko vsebino in se izbrišejo avtomatično. Deljenje nezakonitih materialov je strogo prepovedano. Zaradi varnosti in preprečevanja zlorabe se IP naslovi in dnevniki aktivnosti zapisujejo 90 dni, nato pa se izbrišejo.",
   "no_files_yet": "Datotek še ni.",
   "link_copied": "Povezava kopirana!",
   "text_input_modal_title": "Vnesite besedilo",

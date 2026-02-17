@@ -8,7 +8,7 @@
   "approve": "Onartu",
   "reject": "Ukatu",
   "text_input": "Sartu testua zuzenean",
-  "disclaimer": "Erabiltzaileek partekatutako eduki guztiaren erantzukizun legal bakarra dute. Material ilegalen partekatzea zorrotuki debekatuta dago. Segurtasunaren eta abusua saihesteko, IP helbideak eta jardueraren erregistroak 90 egunez erregistratzen dira eta gero ezabatzen dira.",
+  "disclaimer": "Erabiltzaileek partekatutako eduki guztiaren erantzukizuna guzti partekatutako edukia eta ezabatzen automatskioki. Material ilegalen partekatzea zorrotuki debekatua dago. Sistema-abusuaren prebentziorako, IP helbideak eta jardueraketen erregistroak 90 egunetan eta geroago ezabatzen dira.",
   "no_files_yet": "Oraindik ez dago fitxategirik.",
   "link_copied": "Esteka kopiatu da!",
   "text_input_modal_title": "Sartu testua",

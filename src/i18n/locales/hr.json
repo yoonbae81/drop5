@@ -8,7 +8,7 @@
   "approve": "Odobri",
   "reject": "Odbaci",
   "text_input": "Izravno unijeti tekst",
-  "disclaimer": "Korisnici snose jedinu pravnu odgovornost za sav dijeljeni sadržaj. Dijeljenje ilegalnih materijala je strogo zabranjeno. Zbog sigurnosti i sprječavanja zlouporabe, IP adrese i evidencije aktivnosti se bilježe 90 dana, a zatim se brišu.",
+  "disclaimer": "Korisnici snose jedinu pravnu odgovornost za sav dijeljeni sadržaj i brišu se automatski. Dijeljenje ilegalnih materijala je strogo zabranjeno. Zbog sigurnosti i sprječavanja zlouporabe, IP adrese i evidencije aktivnosti se bilježe 90 dana, a zatim se brišu.",
   "no_files_yet": "Još nema datoteka.",
   "link_copied": "Poveznica kopirana!",
   "text_input_modal_title": "Unesite tekst",

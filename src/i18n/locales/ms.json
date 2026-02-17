@@ -8,7 +8,7 @@
   "approve": "Luluskan",
   "reject": "Tolak",
   "text_input": "Masukkan teks secara langsung",
-  "disclaimer": "Pengguna menanggung tanggungjawab undang-undang untuk fail yang dimuat naik. Perkongsian bahan haram adalah dilarang. Fail dipadam dalam masa 5 minit. Untuk mencegah penyalahgunaan sistem, alamat IP dan log penggunaan disimpan selama 90 hari dan kemudian dipadam.",
+  "disclaimer": "Pengguna menanggung tanggungjawab undang-undang untuk fail yang dimuat naik. Perkongsian bahan haram adalah dilarang. Fail dipadam secara automatik dalam masa 5 minit. Untuk mencegah penyalahgunaan sistem, alamat IP dan log penggunaan disimpan selama 90 hari dan kemudian dipadam.",
   "no_files_yet": "Belum ada fail.",
   "link_copied": "Pautan disalin!",
   "text_input_modal_title": "Masukkan teks",

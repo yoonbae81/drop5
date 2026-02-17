@@ -8,7 +8,7 @@
   "approve": "Onayla",
   "reject": "Reddet",
   "text_input": "Metni doğrudan girin",
-  "disclaimer": "Kullanıcılar yüklenen dosyalar için yasal sorumluluğu taşımaktadır. Yasal olmayan materyallerin paylaşılması yasaktır. Dosyalar 5 dakika içinde silinir. Sistem kötüye kullanımını önlemek için IP adresleri ve kullanım günlükleri 90 gün boyunca tutulur ve ardından silinir.",
+  "disclaimer": "Kullanıcılar yüklenen dosyaların yasal sorumluluğundan sorumludur. Yasal olmayan materyallerin paylaşılması yasaktır. Dosyalar 5 dakika içinde otomatik olarak silinir. Sistem kötüye kullanımını önlemek için IP adresleri ve kullanım günlükleri 90 gün boyunca tutulur ve ardından silinir.",
   "no_files_yet": "Henüz dosya yok.",
   "link_copied": "Bağlantı kopyalandı!",
   "text_input_modal_title": "Metin girin",

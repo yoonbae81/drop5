@@ -8,7 +8,7 @@
   "approve": "Aprobar",
   "reject": "Rexeitar",
   "text_input": "Introducir texto directamente",
-  "disclaimer": "Os usuarios asumen a responsabilidade legal dos ficheiros cargados. Está prohibido compartir materiais ilegais. Os ficheiros elimínanse en 5 minutos. Para previr o abuso do sistema, rexístranse os enderezos IP e os rexistros de uso durante 90 días e logo elimínanse.",
+  "disclaimer": "Os usuarios asumen a responsabilidade legal dos ficheiros cargados e elimínanse automaticamente. Está prohibido compartir materiais ilegais. Para previr o abuso do sistema, rexístranse os enderezos IP e os rexistros de uso durante 90 días e logo elimínanse.",
   "no_files_yet": "Aínda non hai ficheiros.",
   "link_copied": "Ligazón copiada!",
   "text_input_modal_title": "Introducir texto",

@@ -8,7 +8,7 @@
   "approve": "Kinnita",
   "reject": "Lükka tagasi",
   "text_input": "Sisesta tekst otse",
-  "disclaimer": "Kasutajad kannavad ainulaadset juriidilist vastutuse kogu jagatud sisu eest. Ebaseaduslike materjalide jagamine on rangelt keelatud. Turvalisuse ja kuritarvitamise ennetamiseks salvestatakse IP-aadressid ja tegevuslogid 90 päevaks ja seejärel kustutatakse.",
+  "disclaimer": "Kasutajad kannavad ainulaadset juriidilist vastutust kogu jagatud sisu eest ja kustutatakse automaatselt. Ebaseaduslike materjalide jagamine on rangelt keelatud. Turvalisuse ja kuritarvitamise ennetamiseks salvestatakse IP-aadressid ja tegevuslogid 90 päevaks ja seejärel kustutatakse.",
   "no_files_yet": "Faile veel pole.",
   "link_copied": "Link kopeeritud!",
   "text_input_modal_title": "Sisesta tekst",

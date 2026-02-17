@@ -8,7 +8,7 @@
   "approve": "Schváliť",
   "reject": "Odmietnuť",
   "text_input": "Priame zadanie textu",
-  "disclaimer": "Používatelia nesú právnu zodpovednosť za nahrané súbory. Zdieľanie nezákonných materiálov je zakázané. Súbory sa vymažú do 5 minút. Na prevenciu zneužívania systému sa IP adresy a denníky používania uchovávajú 90 dní a potom sa vymažú.",
+  "disclaimer": "Používatelia nesú právnu zodpovednosť za nahrané súbory a vymažú sa automaticky do 5 minút. Zdieľanie nezákonných materiálov je zakázané. Na prevenciu zneužívania systému sa IP adresy a denníky používania uchovávajú 90 dní a potom sa vymažú.",
   "no_files_yet": "Zatiaľ žiadne súbory.",
   "link_copied": "Odkaz skopírovaný!",
   "text_input_modal_title": "Zadajte text",

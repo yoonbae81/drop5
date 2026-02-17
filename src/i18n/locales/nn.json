@@ -8,7 +8,7 @@
   "approve": "Godkjenn",
   "reject": "Avvis",
   "text_input": "Skriv inn tekst direkte",
-  "disclaimer": "Brukarar ber juridisk ansvar for opplasta filer. Deling av ulovlege materiale er forbode. Filer vert sletta innan 5 minutt. For å hindre misbruk av systemet vert IP-adresser og bruksloggar lagra i 90 dagar og deretter sletta.",
+  "disclaimer": "Brukarar ber juridisk ansvar for opplasta filer og vert sletta automatisk innan 5 minutt. Deling av ulovlege materiale er forbode. For å hindre misbruk av systemet vert IP-adresser og bruksloggar lagra i 90 dagar og deretter sletta.",
   "no_files_yet": "Ingen filer enno.",
   "link_copied": "Lenke kopiert!",
   "text_input_modal_title": "Skriv inn tekst",

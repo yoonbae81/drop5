@@ -8,7 +8,7 @@
   "approve": "Goedkeuren",
   "reject": "Afwijzen",
   "text_input": "Tekst direct invoeren",
-  "disclaimer": "Gebruikers dragen de juridische verantwoordelijkheid voor geüploade bestanden. Het delen van illegale materialen is verboden. Bestanden worden binnen 5 minuten verwijderd. Om misbruik van het systeem te voorkomen, worden IP-adressen en gebruikslogs 90 dagen bewaard en daarna verwijderd.",
+  "disclaimer": "Gebruikers zijn verantwoordelijk voor de juridische verantwoordelijkheid van geüploade bestanden. Het delen van illegale materialen is verboden. Bestanden worden binnen 5 minuten automatisch verwijderd. Om misbruik van het systeem te voorkomen, worden IP-adressen en gebruikslogs 90 dagen bewaard en daarna verwijderd.",
   "no_files_yet": "Nog geen bestanden.",
   "link_copied": "Link gekopieerd!",
   "text_input_modal_title": "Tekst invoeren",

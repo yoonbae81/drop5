@@ -8,7 +8,7 @@
   "approve": "Aprovar",
   "reject": "Rebutjar",
   "text_input": "Introduir text directament",
-  "disclaimer": "Els usuaris assumeixen responsabilitat legal dels fitxers carregats. Està prohibit compartir materials il·legals. Els fitxers s'eliminen dins de 5 minuts. Per prevenir l'abús del sistema, les adreces IP i els registres d'ús es registren durant 90 dies i després s'eliminen.",
+  "disclaimer": "Els usuaris assumeixen responsabilitat legal dels fitxers carregats i s'eliminen automàticament. Està prohibit compartir materials il·legals. Per prevenir l'abús del sistema, les adreces IP i els registres d'ús es registren durant 90 dies i després s'eliminen.",
   "no_files_yet": "Encara no hi ha fitxers.",
   "link_copied": "Enllaç copiat!",
   "text_input_modal_title": "Introdueix text",

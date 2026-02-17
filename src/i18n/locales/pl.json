@@ -8,7 +8,7 @@
   "approve": "Zatwierdź",
   "reject": "Odrzuć",
   "text_input": "Wprowadź tekst bezpośrednio",
-  "disclaimer": "Użytkownicy ponoszą odpowiedzialność prawną za przesłane pliki. Udostępnianie nielegalnych materiałów jest zabronione. Pliki są usuwane w ciągu 5 minut. W celu zapobiegania nadużyciom systemu, adresy IP i logi użytkowania są przechowywane przez 90 dni, a następnie usuwane.",
+  "disclaimer": "Użytkownicy są odpowiedzialni za odpowiedzialność prawną przesłanych plików. Udostępnianie nielegalnych materiałów jest zabronione. Pliki są automatycznie usuwane w ciągu 5 minut. W celu zapobiegania nadużyciom systemu, adresy IP i logi użytkowania są przechowywane przez 90 dni, a następnie usuwane.",
   "no_files_yet": "Brak plików.",
   "link_copied": "Link skopiowany!",
   "text_input_modal_title": "Wpisz tekst",

@@ -8,7 +8,7 @@
   "approve": "Aprobați",
   "reject": "Respingeți",
   "text_input": "Introduceți text direct",
-  "disclaimer": "Utilizatorii poartă responsabilitatea legală pentru fișierele încărcate. Partajarea materialelor ilegale este interzisă. Fișierele sunt șterse în 5 minute. Pentru a preveni abuzul sistemului, adresele IP și jurnalele de utilizare sunt păstrate 90 de zile și apoi șterse.",
+  "disclaimer": "Utilizatorii poartă responsabilitatea legală pentru fișierele încărcate și sunt șterse automat. Partajarea materialelor ilegale este interzisă. Pentru a preveni abuzul sistemului, adresele IP și jurnalele de utilizare sunt păstrate 90 de zile și apoi șterse.",
   "no_files_yet": "Încă nu există fișiere.",
   "link_copied": "Link copiat!",
   "text_input_modal_title": "Introduceți text",

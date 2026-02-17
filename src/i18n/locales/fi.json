@@ -8,7 +8,7 @@
   "approve": "Hyväksy",
   "reject": "Hylkää",
   "text_input": "Syötä tekstiä suoraan",
-  "disclaimer": "Käyttäjät kantavat juridisen vastuun ladatuista tiedostoista. Laittoman materiaalin jakaminen on kielletty. Tiedostot poistetaan 5 minuutin kuluessa. Järjestelmän väärinkäytön estämiseksi IP-osoitteet ja käyttölokit tallennetaan 90 päiväksi ja sen jälkeen poistetaan.",
+  "disclaimer": "Käyttäjät kantavat juridisen vastuun ladatuista tiedostoista ja poistetaan automaattisesti 5 minuutin kuluessa. Laittoman materiaalin jakaminen on kielletty. Järjestelmän väärinkäytön estämiseksi IP-osoitteet ja käyttölokit tallennetaan 90 päiväksi ja sen jälkeen poistetaan.",
   "no_files_yet": "Ei vielä tiedostoja.",
   "link_copied": "Linkki kopioitu!",
   "text_input_modal_title": "Syötä tekstiä",
