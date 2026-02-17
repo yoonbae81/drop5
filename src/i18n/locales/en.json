@@ -9,7 +9,7 @@
   "approve": "Approve",
   "reject": "Reject",
   "text_input": "Enter text directly",
-  "disclaimer": "Users are responsible for the legal liability of uploaded files. Illegal sharing is prohibited. Files are automatically deleted within 5 minutes. IP addresses and usage records are retained for 90 days for system abuse prevention, then deleted.",
+  "disclaimer": "Users are legally responsible for uploaded files, which are automatically deleted within 5 minutes. IP addresses and usage records are retained for 90 days to prevent illegal sharing and system abuse, then deleted.",
   "link_copied": "Link copied!",
   "text_input_modal_title": "Enter text",
   "delete_all_files": "Delete all files",
