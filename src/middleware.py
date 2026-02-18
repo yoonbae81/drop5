@@ -111,12 +111,8 @@ class SecurityMiddleware:
         # 1. Check User-Agent Blacklist (Instant)
         if ua:
             if any(pattern in ua for pattern in self.blocked_uas):
-                # Log the blocked UA attempt
-                if self.logger_func:
-                    try:
-                         self.logger_func('BLOCK_UA', code=None, client_id=None, ip=ip, details={'ua': ua, 'reason': 'UA Blacklist'})
-                    except: pass
-                abort(403, "Access denied: Malicious tool detected.")
+                # Persistent block for malicious User-Agents
+                self._block_ip(ip, now, f"Blacklisted User-Agent: {ua}")
 
         # 2. Check IP Blocklist
         if ip in self.blocked_ips:
