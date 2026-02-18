@@ -61,8 +61,15 @@ class DosProtectionPlugin(BaseSecurityPlugin):
             # Instant upload check (machine speed) using tracked first_seen
             if client_id:
                  start_time = self.first_seen.get((ip, client_id))
-                 if start_time and (now - start_time) < self.min_upload_delay:
-                     return True, "Bot Behavior (Instant Upload)", {"delay": now - start_time, "violation": "INSTANT_UPLOAD"}
+                 delay = now - start_time if start_time else 0
+                 
+                 if delay < self.min_upload_delay:
+                     # False positive check: Analyze log history
+                     # If we have history older than min_delay, it's a human
+                     if access_log and (now - access_log[0]['timestamp']) > self.min_upload_delay:
+                         pass # Allow, proven history
+                     else:
+                         return True, "Bot Behavior (Instant Upload)", {"delay": delay, "violation": "INSTANT_UPLOAD"}
             
             # Upload frequency check
             uploads = len([e for e in access_log if e.get('action') == 'UPLOAD'])

@@ -115,7 +115,7 @@ class SecurityMiddleware:
                     'is_blocked': True # Trigger for verdict: BLOCK_IP
                 })
                 
-                self.logger_func(original_action or 'UNKNOWN_ACTION', 
+                self.logger_func(original_action or 'MALICIOUS_ACCESS', 
                                code=None, client_id=None, ip=ip, 
                                details=log_details)
             except:
