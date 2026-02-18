@@ -36,15 +36,21 @@ def calculate_file_hash(filepath):
 
 def log_action(action, code, client_id, ip, details=None):
     """
-    Log structured JSON action record
+    Log structured JSON action record.
+    If action is BLOCK_IP, prefix with [SECURITY] for fail2ban visibility.
     """
     log_entry = {
         'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()), # Recorded in UTC
-        'action': action,          # UPLOAD, DOWNLOAD, JOIN, DELETE
+        'action': action,          # UPLOAD, DOWNLOAD, JOIN, DELETE, BLOCK_IP
         'code': code,              # Session code
         'client_id': client_id,    # User ID
         'ip': ip,                  # IP Address
         'details': details or {}   # Filename, hash, etc.
     }
-    # Record one line per JSON entry
-    logger.info(json.dumps(log_entry, ensure_ascii=False))
+    
+    line = json.dumps(log_entry, ensure_ascii=False)
+    if action == 'BLOCK_IP':
+        # Add a clear prefix and ensure IP is easily findable for fail2ban
+        line = f"[SECURITY] {ip} - {line}"
+    
+    logger.info(line)

@@ -71,17 +71,29 @@ cp .env.example .env    # 환경 설정 파일 생성 (필요시 수정)
 ./scripts/install-systemd.sh
 ```
 
-**주요 명령어**:
-```bash
-# 메인 서비스 상태 및 로그 확인
-systemctl --user status drop5
-journalctl --user -u drop5 -f
+### 3. fail2ban 연동 (보안 강화)
+운영 환경(Linux)에서는 `fail2ban`을 연동하여 시스템 레벨에서 무단 접근을 강력하게 차단할 수 있습니다. `drop5`는 보안 이벤트를 감지하면 `audit/audit.log`에 `[SECURITY]` 프리픽스와 함께 로그를 남깁니다.
 
-# RIR 데이터 업데이트 타이머 확인 (IP 기반 국가 식별용)
-systemctl --user list-timers drop5-rir-update.timer
+**1단계: 필터 설정 (`/etc/fail2ban/filter.d/drop5.conf`)**
+```ini
+[Definition]
+failregex = ^\[SECURITY\] <HOST> - .*$
+ignoreregex =
 ```
 
-### 3. 테스트 실행
+**2단계: 감옥 설정 (`/etc/fail2ban/jail.d/drop5.conf`)**
+```ini
+[drop5]
+enabled = true
+port    = http,https
+filter  = drop5
+logpath = /path/to/drop5/audit/audit.log
+maxretry = 1
+bantime  = 3600
+findtime = 600
+```
+
+### 4. 테스트 실행
 의존성이 설치된 상태에서 다음 명령어로 전체 테스트를 수행할 수 있습니다.
 ```bash
 ./.venv/bin/python3 -m unittest discover tests -v
@@ -97,15 +109,30 @@ drop5/
 │   ├── main.py          # 메인 API 및 라우팅 로직
 │   ├── session.py       # 세션 상태 및 파일 생명주기(TTL) 관리
 │   ├── config.py        # 환경 변수 및 전역 설정
-│   ├── middleware.py    # 보안 필터 (Brute Force, 보안 헤더)
+│   ├── middleware.py    # 보안 미들웨어 (이벤트 감지 및 로컬 캐싱)
 │   ├── utils.py         # 파일 처리 및 한글 정규화 유틸리티
-│   ├── audit.py         # 보안 감사 로그 처리
+│   ├── audit.py         # 감사 및 보안 로그 처리 (fail2ban 연동)
 │   ├── i18n/            # 다국어 지원 모듈 및 로케일 파일
 │   └── views/           # 프론트엔드 (HTML/JS/CSS)
 ├── scripts/             # 배포 및 관리 스크립트
 ├── tests/               # 단위 테스트 코드
-└── files/               # 임시 파일 저장소 (자동 관리)
+├── files/               # 임시 파일 저장소 (자동 관리)
+├── security/            # 보안 설정 (차단 UA 목록 등)
+└── audit/               # fail2ban이 모니터링할 로그 디렉토리
 ```
+
+---
+
+## 🔐 보안 아키텍처 (Hybrid Protection)
+
+Drop5는 **어플리케이션 계층(L7)**의 정밀한 탐지와 **커널 계층(L3/L4)**의 효율적인 차단을 결합한 하이브리드 보호 모델을 사용합니다.
+
+1.  **탐지 (Python Middleware)**: 실시간으로 행동(Behavioral) 분석을 수행합니다. (예: 1.5초 이내 즉시 업로드, 비정상적 요청 빈도, 금지된 User-Agent 등)
+2.  **기록 (Audit Logger)**: 위반 사례가 확인되면 `audit.log`에 `[SECURITY]` 태그와 함께 IP 정보를 즉시 기록합니다.
+3.  **차단 (fail2ban/OS)**: 리눅스 환경의 `fail2ban`이 로그를 감시하다가 위반 IP를 발견하는 즉시 `iptables` 또는 `nftables`를 통해 시스템 전체에서 차단합니다.
+4.  **로컬 캐시**: `fail2ban`이 차단하기 전까지의 짧은 간극(Gaps)은 Python 프로세스 내부 메모리 캐시를 통해 즉각 차단하여 보호합니다.
+
+*개발 환경(`DEBUG=true`)에서는 위 기능들이 자동으로 비활성화되어 개발 편의성을 보장합니다.*
 
 ---
 

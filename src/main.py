@@ -66,11 +66,9 @@ try:
 except ImportError:
     from src.middleware import SecurityMiddleware, security_plugin
 
-# SECURITY: Use environment variables for configurable brute force and rate limit protection
+# SECURITY: Use environment variables for simplified behavioral protection
 protection = SecurityMiddleware(
     limit=int(os.getenv('BRUTE_FORCE_LIMIT', '10')),
-    window=int(os.getenv('BRUTE_FORCE_WINDOW', '60')),
-    block_duration=int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600')),
     logger_func=log_action
 )
 app.install(security_plugin(protection))

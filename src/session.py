@@ -4,7 +4,7 @@ import glob
 import shutil
 import json
 import fcntl
-from src.config import UPLOAD_DIR, FILE_TIMEOUT, TRUSTED_IP_TIMEOUT
+from src.config import UPLOAD_DIR, FILE_TIMEOUT
 from src.utils import format_size
 
 def get_session_size(code_dir):
@@ -252,32 +252,7 @@ def cleanup_stale_clients(state):
             
     state['clients'] = active_clients
     
-    # Also cleanup expired trusted IPs
-    if cleanup_trusted_ips(state):
-        changed = True
-        
-    return changed
-
-def cleanup_trusted_ips(state):
-    """Remove trusted IPs older than 24 hours."""
-    now = time.time()
-    trusted = state.get('trusted_ips', {})
-    
-    # Handle legacy list format
-    if isinstance(trusted, list):
-        state['trusted_ips'] = {} # Reset to dict
-        return True
-        
-    new_trusted = {}
-    changed = False
-    for ip, approved_at in trusted.items():
-        if now - approved_at < TRUSTED_IP_TIMEOUT:
-            new_trusted[ip] = approved_at
-        else:
-            changed = True
-            print(f"[{time.strftime('%H:%M:%S')}] Trusted IP expired: {ip}")
-            
-    state['trusted_ips'] = new_trusted
+    state['clients'] = active_clients
     return changed
 
 def is_client_approved(state, client_id):
