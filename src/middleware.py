@@ -32,13 +32,16 @@ class SecurityMiddleware:
         self.block_file = BLOCKED_IP_FILE
         self.ua_file = BLOCKED_UA_FILE
         
-        # Logs
+        # Initial load and sync
         self.access_log = {}         # {ip: [(timestamp, type_id), ...]}
         self.blocked_ips = {}         # {ip: expiry_timestamp}
         self.first_seen = {}          # {(ip, client_id): timestamp}
         self.blocked_uas = set()      # Dynamic set from file
         
-        # Initial load and sync
+        import fcntl
+        self.fcntl = fcntl # Keep reference
+        
+        # Initial load
         self._load_blocks()
         self._load_uas()
         
@@ -47,28 +50,55 @@ class SecurityMiddleware:
         self.last_prune = time.time()
 
     def _load_blocks(self):
-        """Load blocked IPs from shared file for multi-process sync."""
+        """Load blocked IPs from shared file with locking."""
         if os.path.exists(self.block_file):
             try:
                 with open(self.block_file, 'r') as f:
-                    if os.path.getsize(self.block_file) > 0:
-                        data = json.load(f)
-                        now = time.time()
-                        self.blocked_ips.update({ip: exp for ip, exp in data.items() if exp > now})
+                    self.fcntl.flock(f, self.fcntl.LOCK_SH) # Shared lock for reading
+                    try:
+                        if os.path.getsize(self.block_file) > 0:
+                            data = json.load(f)
+                            now = time.time()
+                            # Clean expired while loading
+                            valid_blocks = {ip: exp for ip, exp in data.items() if exp > now}
+                            self.blocked_ips.update(valid_blocks)
+                    finally:
+                        self.fcntl.flock(f, self.fcntl.LOCK_UN)
             except Exception as e:
                 print(f"SECURITY: Error loading block file: {e}")
 
     def _save_block(self, ip, expiry):
-        """Save block to shared file."""
-        self._load_blocks() # Refresh
-        self.blocked_ips[ip] = expiry
-        
-        # Ensure directory exists before saving
+        """Save block to shared file with exclusive locking."""
+        # Ensure directory exists
         os.makedirs(os.path.dirname(self.block_file), exist_ok=True)
         
         try:
-            with open(self.block_file, 'w') as f:
-                json.dump(self.blocked_ips, f)
+            # Use r+ to avoid truncation before locking
+            mode = 'r+' if os.path.exists(self.block_file) else 'w+'
+            with open(self.block_file, mode) as f:
+                self.fcntl.flock(f, self.fcntl.LOCK_EX) # Exclusive lock
+                try:
+                    data = {}
+                    if mode == 'r+' and os.path.getsize(self.block_file) > 0:
+                        try:
+                            data = json.load(f)
+                        except: pass
+                    
+                    now = time.time()
+                    # Merge with existing blocks and clean expired
+                    data.update({i: e for i, e in self.blocked_ips.items() if e > now})
+                    data[ip] = expiry
+                    
+                    f.seek(0)
+                    f.truncate()
+                    json.dump(data, f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                    
+                    # Update local memory too
+                    self.blocked_ips = data
+                finally:
+                    self.fcntl.flock(f, self.fcntl.LOCK_UN)
         except Exception as e:
             print(f"SECURITY: Error saving block file: {e}")
 
@@ -100,26 +130,26 @@ class SecurityMiddleware:
         """Check if the current IP or User-Agent is blocked. Raise 403 if blocked."""
         ip = self.get_ip()
         now = time.time()
-        ua = request.get_header('User-Agent', '').lower()
         
-        # Periodically refresh from shared blocks
-        if now - self.last_sync > 60:
+        # Periodically refresh from shared blocks (Sync every 5 seconds)
+        if now - self.last_sync > 5:
             self._load_blocks()
             self._load_uas()
             self.last_sync = now
 
-        # 1. Check User-Agent Blacklist (Instant)
-        if ua:
-            if any(pattern in ua for pattern in self.blocked_uas):
-                # Persistent block for malicious User-Agents
-                self._block_ip(ip, now, f"Blacklisted User-Agent: {ua}")
-
-        # 2. Check IP Blocklist
+        # 1. Check IP Blocklist FIRST (Zero processing for already blocked)
         if ip in self.blocked_ips:
             if now < self.blocked_ips[ip]:
                 abort(403, "Security protection: Access blocked.")
             else:
                 del self.blocked_ips[ip]
+
+        # 2. Check User-Agent Blacklist SECOND
+        ua = request.get_header('User-Agent', '').lower()
+        if ua:
+            if any(pattern in ua for pattern in self.blocked_uas):
+                # Persistent block for malicious User-Agents
+                self._block_ip(ip, now, f"Blacklisted User-Agent: {ua}")
 
     def record_access(self, code=None, action=None, client_id=None):
         """Record and check access using a behavioral-centric model."""
