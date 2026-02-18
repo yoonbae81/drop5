@@ -1,10 +1,10 @@
 import time
 import os
-import ipaddress
 import platform
 from bottle import request, abort
 import json
-from src.config import TRUSTED_PROXIES, BLOCKED_UA_FILE, DEBUG
+from src.config import BLOCKED_UA_FILE, DEBUG
+from src.utils import get_client_ip
 
 class SecurityMiddleware:
     def __init__(self, logger_func=None):
@@ -26,25 +26,11 @@ class SecurityMiddleware:
         """Register a security plugin."""
         self.plugins.append(plugin)
 
-    def get_ip(self):
-        """Get the client's IP address securely."""
-        remote_addr = request.remote_addr
-        forwarded = request.environ.get('HTTP_X_FORWARDED_FOR')
-        
-        if forwarded and TRUSTED_PROXIES:
-            try:
-                client_addr = ipaddress.ip_address(remote_addr)
-                if any(client_addr in net for net in TRUSTED_PROXIES):
-                    return forwarded.split(',')[0].strip()
-            except ValueError:
-                pass
-        return remote_addr
-
     def check_blocked(self):
-        """Check if blocked by IP (Local Cache)."""
+        """Check if blocked by IP (Local Cache) or Plugin Immediate Check."""
         if self.is_dev: return
 
-        ip = self.get_ip()
+        ip = get_client_ip()
         now = time.time()
         
         # Check local memory cache
@@ -54,13 +40,21 @@ class SecurityMiddleware:
             else:
                 del self.blocked_ips[ip]
 
+        # Run immediate checks (stateless, fast) from plugins
+        for plugin in self.plugins:
+            # Plugins block if check_immediate returns True
+            should_block, reason, details = plugin.check_immediate(request, ip)
+            if should_block:
+                self._block_ip(ip, now, reason, 'IMMEDIATE_CHECK', details)
+                # _block_ip calls abort(), so execution stops here
+
     def record_access(self, code=None, action=None, client_id=None):
         """
         Record access and run security plugins.
         """
         if self.is_dev: return
 
-        ip = self.get_ip()
+        ip = get_client_ip()
         if not ip: return
         
         now = time.time()
@@ -84,7 +78,7 @@ class SecurityMiddleware:
         self.access_log[ip] = [e for e in self.access_log[ip] if now - e['timestamp'] <= 60]
         history = self.access_log[ip]
 
-        # 3. Run Plugins
+        # 3. Run Plugins (Behavioral Analysis)
         for plugin in self.plugins:
             try:
                 # Plugins return (actions_to_block, reason, details)
@@ -135,6 +129,10 @@ def security_plugin(protection):
     def plugin(callback):
         def wrapper(*args, **kwargs):
             if protection.is_dev: return callback(*args, **kwargs)
+            
+            # 1. Immediate Check (Start of request)
+            # Must run before logging to prevent "late blocking" logs
+            protection.check_blocked()
             
             client_id = None
             if request.json: client_id = request.json.get('clientId')

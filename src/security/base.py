@@ -20,6 +20,16 @@ class BaseSecurityPlugin:
         """
         raise NotImplementedError("Plugins must implement inspect()")
 
+    def check_immediate(self, request, ip):
+        """
+        Check immediately before any processing (stateless).
+        
+        :param request: The Bottle request object
+        :param ip: Client IP address
+        :return: (is_blocked, reason, details)
+        """
+        return False, None, None
+
     def on_block(self, ip, reason):
         """Optional hook when a block occurs."""
         pass

@@ -22,7 +22,8 @@ class UABlockerPlugin(BaseSecurityPlugin):
             except:
                 pass
 
-    def inspect(self, req, ip, access_log):
+    def check_immediate(self, req, ip):
+        """Check User-Agent immediately."""
         now = time.time()
         # Periodically refresh
         if now - self.last_sync > 60:
@@ -32,5 +33,9 @@ class UABlockerPlugin(BaseSecurityPlugin):
         ua = req.get_header('User-Agent', '').lower()
         if ua and any(pattern in ua for pattern in self.blocked_uas):
             return True, "Blacklisted User-Agent", {"ua": ua}
-        
+            
+        return False, None, None
+
+    def inspect(self, req, ip, access_log):
+        # Already checked in check_immediate
         return False, None, None
