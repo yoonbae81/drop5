@@ -110,7 +110,12 @@ drop5/
 │   ├── main.py          # 메인 API 및 라우팅 로직
 │   ├── session.py       # 세션 상태 및 파일 생명주기(TTL) 관리
 │   ├── config.py        # 환경 변수 및 전역 설정
-│   ├── middleware.py    # 보안 미들웨어 (이벤트 감지 및 로컬 캐싱)
+│   ├── middleware.py    # 보안 미들웨어 컨테이너 (플러그인 실행기)
+│   ├── security/        # 보안 플러그인 모듈
+│   │   ├── base.py                 # 플러그인 인터페이스
+│   │   ├── brute_force_protection.py # 무차별 대입 방어
+│   │   ├── ua_blocker.py           # 악성 User-Agent 차단
+│   │   └── dos_protection.py       # (비공개) DoS 방어 로직
 │   ├── utils.py         # 파일 처리 및 한글 정규화 유틸리티
 │   ├── audit.py         # 감사 및 보안 로그 처리 (fail2ban 연동)
 │   ├── i18n/            # 다국어 지원 모듈 및 로케일 파일
@@ -118,7 +123,7 @@ drop5/
 ├── scripts/             # 배포 및 관리 스크립트
 ├── tests/               # 단위 테스트 코드
 ├── files/               # 임시 파일 저장소 (자동 관리)
-├── security/            # 보안 설정 (차단 UA 목록 등)
+├── security/            # 보안 설정 파일 (예: blocked_uas.txt)
 └── audit/               # fail2ban이 모니터링할 로그 디렉토리
 ```
 
@@ -128,10 +133,13 @@ drop5/
 
 Drop5는 **어플리케이션 계층(L7)**의 정밀한 탐지와 **커널 계층(L3/L4)**의 효율적인 차단을 결합한 하이브리드 보호 모델을 사용합니다.
 
-1.  **탐지 (Python Middleware)**: 실시간으로 행동(Behavioral) 분석을 수행합니다. (예: 1.5초 이내 즉시 업로드, 비정상적 요청 빈도, 금지된 User-Agent 등)
+1.  **탐지 (Plugin Security)**: 보안 로직이 모듈화된 **플러그인 아키텍처**를 사용합니다. 각 플러그인은 독립적으로 요청을 분석합니다.
+    - `UABlockerPlugin`: 블랙리스트에 등재된 악성 봇 차단
+    - `BruteForcePlugin`: 세션 코드 무차별 대입 시도 감지
+    - `DosProtectionPlugin`: (비공개) 정밀한 행동 분석을 통한 DoS 공격 방어
 2.  **기록 (Audit Logger)**: 위반 사례가 확인되면 `audit.log`에 `verdict: BLOCK_IP` 태그와 함께 IP 정보를 즉시 기록합니다.
 3.  **차단 (fail2ban/OS)**: 리눅스 환경의 `fail2ban`이 로그를 감시하다가 위반 IP를 발견하는 즉시 `iptables` 또는 `nftables`를 통해 시스템 전체에서 차단합니다.
-4.  **로컬 캐시**: `fail2ban`이 차단하기 전까지의 짧은 간극(Gaps)은 Python 프로세스 내부 메모리 캐시를 통해 즉각 차단하여 보호합니다.
+4.  **로컬 캐시**: 미들웨어 레벨에서도 짧은 시간 동안 IP를 메모리에 캐싱하여, OS 차단이 적용되기 전까지의 간극(Gap)을 즉시 방어합니다.
 
 *개발 환경(`DEBUG=true`)에서는 위 기능들이 자동으로 비활성화되어 개발 편의성을 보장합니다.*
 

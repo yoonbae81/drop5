@@ -27,6 +27,5 @@ Thumbs.db
 files/
 logs/
 audit/
-security/
 *.log
 src/i18n/rsc/

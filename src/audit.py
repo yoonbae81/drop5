@@ -50,7 +50,8 @@ def log_action(action, code, client_id, ip, details=None):
     }
     
     # If this is a security violation, add a verdict field that fail2ban can trigger on
-    if details and details.get('is_blocked'):
+    # Remove the internal flag 'is_blocked' from the details before logging
+    if details and details.pop('is_blocked', False):
         log_entry['verdict'] = 'BLOCK_IP'
         
     logger.info(json.dumps(log_entry, ensure_ascii=False))
