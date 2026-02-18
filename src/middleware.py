@@ -1,7 +1,8 @@
 import time
 import os
 import ipaddress
-from bottle import request, abort, json
+from bottle import request, abort
+import json
 from src.config import TRUSTED_PROXIES, BLOCKED_UA_FILE, BLOCKED_IP_FILE
 
 class SecurityMiddleware:
