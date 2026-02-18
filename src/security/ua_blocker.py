@@ -31,6 +31,6 @@ class UABlockerPlugin(BaseSecurityPlugin):
             
         ua = req.get_header('User-Agent', '').lower()
         if ua and any(pattern in ua for pattern in self.blocked_uas):
-            return True, "Blacklisted User-Agent", {"ua": ua, "violation": "BAD_USER_AGENT"}
+            return True, "Blacklisted User-Agent", {"ua": ua}
         
         return False, None, None
