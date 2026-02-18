@@ -11,6 +11,9 @@ FILE_TIMEOUT = int(os.getenv('FILE_TIMEOUT', 300))  # seconds
 MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', 31457280))  # bytes (30MB)
 MAX_STORAGE_SIZE = int(os.getenv('MAX_STORAGE_SIZE', 104857600))  # bytes (100MB per folder)
 AUDIT_DIR = os.path.abspath(os.getenv('AUDIT_DIR', 'audit'))
+SECURITY_DIR = os.path.abspath(os.getenv('SECURITY_DIR', 'security'))
+BLOCKED_UA_FILE = os.path.join(SECURITY_DIR, 'blocked_uas.txt')
+BLOCKED_IP_FILE = os.path.join(SECURITY_DIR, 'blocked_ips.json')
 TRUSTED_IP_TIMEOUT = 86400  # 24 hours in seconds
 PORT = int(os.getenv('PORT', 5555))
 # SECURITY: Default to false in production to prevent information disclosure

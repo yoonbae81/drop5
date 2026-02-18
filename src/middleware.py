@@ -2,7 +2,7 @@ import time
 import os
 import ipaddress
 from bottle import request, abort, json
-from src.config import TRUSTED_PROXIES
+from src.config import TRUSTED_PROXIES, BLOCKED_UA_FILE, BLOCKED_IP_FILE
 
 class SecurityMiddleware:
     def __init__(self, limit=None, window=None, block_duration=None, logger_func=None):
@@ -27,38 +27,19 @@ class SecurityMiddleware:
         self.block_duration = block_duration if block_duration is not None else int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600'))
         
         # Logs
-        # Shared Block File (For multi-process sync)
-        self.block_file = os.path.join(os.getenv('AUDIT_DIR', 'audit'), 'blocked_ips.json')
+        # Shared Block Files
+        self.block_file = BLOCKED_IP_FILE
+        self.ua_file = BLOCKED_UA_FILE
         
         # Logs
         self.access_log = {}         # {ip: [(timestamp, type_id), ...]}
         self.blocked_ips = {}         # {ip: expiry_timestamp}
         self.first_seen = {}          # {(ip, client_id): timestamp}
-        
-        # Static UA Blacklist (Comprehensive)
-        self.blocked_uas = [
-            # Common Library/Tool patterns
-            'python-requests', 'python-urllib', 'requests/', 'urllib/', 'aiohttp', 'httpx',
-            'go-http', 'curl/', 'wget', 'libwww-perl', 'fasthttp', 'httprequest', 'guzzle',
-            'http-client', 'okhttp', 'java/', 'apache-httpclient', 'ruby', 'php/',
-            
-            # Scrapers / Frameworks / Dev Tools
-            'scrapy', 'selenium', 'playwright', 'puppeteer', 'headlesschrome', 'headless',
-            'phantomjs', 'beautifulsoup', 'postman', 'insomnia', 'brutus', 'rest-client',
-            'node-fetch', 'axios', 'faraday/',
-            
-            # AI & SEO Bots
-            'gptbot', 'chatgpt', 'anthropic-ai', 'claudebot', 'mj12bot', 'dotbot', 
-            'rogerbot', 'exabot', 'semrushbot', 'ahrefsbot', 'blexbot', 'petalsbot', 
-            'bytespider', 'dataforseobot', 'petalbot', 'ccbot', 'censys', 'amazonbot',
-            
-            # Security Scanners
-            'sqlmap', 'nmap', 'zgrab', 'netsparker', 'nikto', 'dirbuster', 'gobuster',
-            'burpsuite', 'w3af'
-        ]
+        self.blocked_uas = set()      # Dynamic set from file
         
         # Initial load and sync
         self._load_blocks()
+        self._load_uas()
         
         # Tracking for refresh
         self.last_sync = time.time()
@@ -85,6 +66,16 @@ class SecurityMiddleware:
         except:
             pass
 
+    def _load_uas(self):
+        """Load blocked UA patterns from the security file."""
+        if os.path.exists(self.ua_file):
+            try:
+                with open(self.ua_file, 'r') as f:
+                    self.blocked_uas = set(line.strip().lower() for line in f 
+                                          if line.strip() and not line.startswith('#'))
+            except:
+                pass
+
     def get_ip(self):
         """Get the client's IP address, handling potential reverse proxies securely."""
         remote_addr = request.remote_addr
@@ -108,6 +99,7 @@ class SecurityMiddleware:
         # Periodically refresh from shared blocks
         if now - self.last_sync > 60:
             self._load_blocks()
+            self._load_uas()
             self.last_sync = now
 
         # 1. Check User-Agent Blacklist (Instant)
@@ -128,66 +120,64 @@ class SecurityMiddleware:
                 del self.blocked_ips[ip]
 
     def record_access(self, code=None, action=None, client_id=None):
-        """Record an access attempt and check per-IP behavioral limits."""
+        """Record and check access using a behavioral-centric model."""
         ip = self.get_ip()
         if not ip: return
         
         now = time.time()
-        
-        if now - self.last_prune > 300:
-            self._prune_logs(now)
+        if now - self.last_prune > 300: self._prune_logs(now)
 
         if ip not in self.access_log:
             self.access_log[ip] = []
             
-        # TRACK BEHAVIOR: Record first time we see this client
+        # 1. Behavioral Tracking
         if client_id:
             key = (ip, client_id)
             if key not in self.first_seen:
                 self.first_seen[key] = now
 
-        # Record Per-IP Access
         self.access_log[ip].append((now, 'req'))
         if code: self.access_log[ip].append((now, f"code:{code}"))
         if action: self.access_log[ip].append((now, f"action:{action}"))
             
-        # Cleanup IP log
-        self.access_log[ip] = [e for e in self.access_log[ip] if now - e[0] <= self.tracking_window]
+        # Cleanup IP log window (Default 60s)
+        self.access_log[ip] = [e for e in self.access_log[ip] if now - e[0] <= 60]
         ip_log = self.access_log[ip]
         
-        # --- PER-IP SECURITY CHECKS ---
+        # --- SIMPLE BEHAVIORAL CHECKS ---
         
-        # 1. Global Request Rate Limit
-        if len([e for e in ip_log if e[1] == 'req']) > self.request_limit:
-            self._block_ip(ip, now, "Rate Limit Exceeded")
-            
-        # 2. Brute Force (Unique Codes)
+        # 1. Brute Force (Unique codes) - Keep this as it's targeted
         codes = len(set(e[1] for e in ip_log if e[1].startswith('code:')))
         if codes >= self.code_limit:
-            self._block_ip(ip, now, f"Brute Force Attempt ({codes} codes)")
+            self._block_ip(ip, now, f"Brute Force Attempt")
+
+        # 2. Advanced Bot Detection (No ClientID + High Frequency)
+        req_count = len([e for e in ip_log if e[1] == 'req'])
+        if not client_id:
+            # Absolute limit for mysterious anonymous requests
+            if req_count > 20: 
+                self._block_ip(ip, now, "Anonymous Volumetric Attack")
             
-        # 3. Behavioral: Instant Upload after JOIN
+            # Anonymous session spamming is high risk
+            sessions = len([e for e in ip_log if e[1] == 'action:CREATE_SESSION'])
+            if sessions > 1:
+                self._block_ip(ip, now, "Bot Session Spike")
+        else:
+            # Regular user limit (Higher, but still protective)
+            if req_count > self.request_limit:
+                self._block_ip(ip, now, "Aggressive Request Spike")
+
+        # 3. Fast-Action Protection (Instant Upload)
         if action == 'UPLOAD':
             if client_id:
                 start_time = self.first_seen.get((ip, client_id))
                 if start_time and (now - start_time) < self.min_upload_delay:
-                    self._block_ip(ip, now, f"Bot Behavior Detected (Instant Upload)")
-
+                    self._block_ip(ip, now, "Bot Behavior (Instant Upload)")
+            
+            # Upload frequency check
             uploads = len([e for e in ip_log if e[1] == 'action:UPLOAD'])
             if uploads > self.upload_limit:
-                self._block_ip(ip, now, "Upload Frequency Exceeded")
-
-        # 4. Behavioral: Multiple Session Creation
-        if action == 'CREATE_SESSION':
-            sessions = len([e for e in ip_log if e[1] == 'action:CREATE_SESSION'])
-            ua = request.get_header('User-Agent', '').lower()
-            is_bot_ua = not ua or any(x in ua for x in ['python', 'go-http', 'curl', 'wget', 'aiohttp'])
-            
-            # Anonymous or Bot-like: Max 1 per minute
-            if (not client_id or is_bot_ua) and sessions > 1:
-                self._block_ip(ip, now, "Bot Session Spamming")
-            elif sessions > 5:
-                self._block_ip(ip, now, "Session Spamming Detected")
+                self._block_ip(ip, now, "Upload Flood Detected")
 
     def _block_ip(self, ip, now, reason):
         """Block the IP and raise 403."""
