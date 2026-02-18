@@ -70,7 +70,8 @@ except ImportError:
 protection = SecurityMiddleware(
     limit=int(os.getenv('BRUTE_FORCE_LIMIT', '10')),
     window=int(os.getenv('BRUTE_FORCE_WINDOW', '60')),
-    block_duration=int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600'))
+    block_duration=int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600')),
+    logger_func=log_action
 )
 app.install(security_plugin(protection))
 
@@ -187,6 +188,10 @@ def home():
     protection.record_access(action='CREATE_SESSION')
     
     code = generate_code()
+    
+    # Audit logging for session creation
+    log_action('CREATE_SESSION', code, None, get_client_ip())
+    
     # Ensure directory exists before redirecting
     os.makedirs(os.path.join(UPLOAD_DIR, code), exist_ok=True)
     
@@ -312,6 +317,10 @@ def main_page(code):
     if not os.path.exists(code_dir):
         # Record session creation for rate limiting
         protection.record_access(action='CREATE_SESSION')
+        
+        # Audit logging for session creation
+        log_action('CREATE_SESSION', code, None, get_client_ip())
+        
         os.makedirs(code_dir, exist_ok=True)
 
     active_files = get_active_files(code_dir)
@@ -609,6 +618,9 @@ def upload_file(code):
     uploads = request.files.getall('file')
     
     if not os.path.exists(code_dir):
+        # Record and log session creation
+        protection.record_access(action='CREATE_SESSION')
+        log_action('CREATE_SESSION', code, client_id, ip)
         os.makedirs(code_dir, exist_ok=True)
 
     print(f"Uploading files for code: {code}")
@@ -810,6 +822,9 @@ def upload_text(code):
         filename_base = re.sub(r'[\\/*?:"<>|]', '_', filename_base)
         
         if not os.path.exists(code_dir):
+            # Record and log session creation
+            protection.record_access(action='CREATE_SESSION')
+            log_action('CREATE_SESSION', code, client_id, ip)
             os.makedirs(code_dir, exist_ok=True)
             
         target_filename = f"{filename_base}.txt"

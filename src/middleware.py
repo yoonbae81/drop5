@@ -5,10 +5,11 @@ from bottle import request, abort
 from src.config import TRUSTED_PROXIES
 
 class SecurityMiddleware:
-    def __init__(self, limit=None, window=None, block_duration=None):
+    def __init__(self, limit=None, window=None, block_duration=None, logger_func=None):
         """
         Initialize security middleware for per-IP rate limiting and behavioral protection.
         """
+        self.logger_func = logger_func
         # --- Per-IP Limits ---
         self.code_limit = limit if limit is not None else int(os.getenv('BRUTE_FORCE_LIMIT', '10'))
         self.code_window = window if window is not None else int(os.getenv('BRUTE_FORCE_WINDOW', '60'))
@@ -120,6 +121,14 @@ class SecurityMiddleware:
     def _block_ip(self, ip, now, reason):
         """Block the IP and raise 403."""
         print(f"SECURITY: Blocking IP {ip} for reason: {reason}")
+        
+        # Log the block action to audit log if logger is provided
+        if self.logger_func:
+            try:
+                self.logger_func('BLOCK_IP', code=None, client_id=None, ip=ip, details={'reason': reason})
+            except:
+                pass
+
         self.blocked_ips[ip] = now + self.block_duration
         if ip in self.access_log:
             del self.access_log[ip]
