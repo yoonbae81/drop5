@@ -4,23 +4,31 @@ import ipaddress
 from bottle import request, abort
 from src.config import TRUSTED_PROXIES
 
-class BruteForceProtection:
+class SecurityMiddleware:
     def __init__(self, limit=None, window=None, block_duration=None):
         """
-        Initialize brute force protection.
-        
-        SECURITY: Reads configuration from environment variables if not provided.
+        Initialize security middleware for rate limiting and brute force protection.
         
         :param limit: Number of unique codes allowed within the window.
         :param window: Time window in seconds.
         :param block_duration: Duration to block the IP in seconds.
         """
-        # SECURITY: Read from environment variables for production configuration
-        self.limit = limit if limit is not None else int(os.getenv('BRUTE_FORCE_LIMIT', '10'))
-        self.window = window if window is not None else int(os.getenv('BRUTE_FORCE_WINDOW', '60'))
+        # Unique code limit (Brute force protection)
+        self.code_limit = limit if limit is not None else int(os.getenv('BRUTE_FORCE_LIMIT', '10'))
+        self.code_window = window if window is not None else int(os.getenv('BRUTE_FORCE_WINDOW', '60'))
+        
+        # Global request limit (DDoS protection)
+        self.request_limit = int(os.getenv('GLOBAL_REQUEST_LIMIT', '50'))
+        self.request_window = int(os.getenv('GLOBAL_REQUEST_WINDOW', '60'))
+        
+        # Expensive action limit (e.g. Uploads)
+        self.upload_limit = int(os.getenv('UPLOAD_REQUEST_LIMIT', '10'))
+        self.upload_window = int(os.getenv('UPLOAD_REQUEST_WINDOW', '60'))
+        
         self.block_duration = block_duration if block_duration is not None else int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600'))
         
-        # access_log: {ip: [(timestamp, code), ...]}
+        # {ip: [(timestamp, type_id), ...]}
+        # type_id: 'code:xyz', 'req', 'upload'
         self.access_log = {}
         # blocked_ips: {ip: expiry_timestamp}
         self.blocked_ips = {}
@@ -40,9 +48,6 @@ class BruteForceProtection:
             except ValueError:
                 pass
         
-        # If no trusted proxies defined, but we are behind one, this might need fallback 
-        # but for security, if TRUSTED_PROXIES is defined, we enforce it.
-        # If TRUSTED_PROXIES is empty, we don't trust XFF at all to prevent spoofing.
         return remote_addr
 
     def check_blocked(self):
@@ -55,53 +60,81 @@ class BruteForceProtection:
                 remaining_sec = int(self.blocked_ips[ip] - now)
                 remaining_min = remaining_sec // 60
                 if remaining_min > 0:
-                    msg = f"Brute force protection: Access denied. Try again in {remaining_min} minutes."
+                    msg = f"Security protection: Access denied. Try again in {remaining_min} minutes."
                 else:
-                    msg = f"Brute force protection: Access denied. Try again in {remaining_sec} seconds."
+                    msg = f"Security protection: Access denied. Try again in {remaining_sec} seconds."
                 abort(403, msg)
             else:
                 # Block expired, remove it
+                print(f"SECURITY: Block expired for IP {ip}")
                 del self.blocked_ips[ip]
 
-    def record_access(self, code):
-        """Record an access attempt to a specific code."""
-        if not code:
-            return
-            
+    def record_access(self, code=None, action=None):
+        """Record an access attempt and check limits."""
         ip = self.get_ip()
         now = time.time()
         
-        # Initialize log for this IP if not present
         if ip not in self.access_log:
             self.access_log[ip] = []
             
-        # Add current access
-        self.access_log[ip].append((now, str(code)))
+        # 1. Record general request
+        self.access_log[ip].append((now, 'req'))
         
-        # Cleanup old entries outside the window
-        self.access_log[ip] = [entry for entry in self.access_log[ip] if now - entry[0] <= self.window]
-        
-        # Count unique codes accessed in the window
-        unique_codes = set(entry[1] for entry in self.access_log[ip])
-        
-        if len(unique_codes) >= self.limit:
-            # Block the IP
-            self.blocked_ips[ip] = now + self.block_duration
-            # Clear their access log
-            if ip in self.access_log:
-                del self.access_log[ip]
+        # 2. Record code access if provided
+        if code:
+            self.access_log[ip].append((now, f"code:{code}"))
             
-            abort(403, "Brute force attempt detected. Access blocked for 1 hour.")
+        # 3. Record action if provided
+        if action:
+            self.access_log[ip].append((now, f"action:{action}"))
+            
+        # Cleanup old entries (use max window)
+        max_window = max(self.code_window, self.request_window, self.upload_window)
+        self.access_log[ip] = [entry for entry in self.access_log[ip] if now - entry[0] <= max_window]
+        
+        # Check Limits
+        log = self.access_log[ip]
+        
+        # DDoS: Global request limit
+        requests_in_window = [e for e in log if e[1] == 'req' and now - e[0] <= self.request_window]
+        if len(requests_in_window) > self.request_limit:
+            self._block_ip(ip, now, f"Rate limit exceeded ({len(requests_in_window)} requests/min).")
+            
+        # Brute Force: Unique codes limit
+        codes_in_window = set(e[1] for e in log if e[1].startswith('code:') and now - e[0] <= self.code_window)
+        if len(codes_in_window) >= self.code_limit:
+            self._block_ip(ip, now, f"Brute force attempt detected ({len(codes_in_window)} codes/min).")
+            
+        # Expensive Actions: Upload limit
+        if action == 'UPLOAD':
+            uploads_in_window = [e for e in log if e[1] == 'action:UPLOAD' and now - e[0] <= self.upload_window]
+            if len(uploads_in_window) > self.upload_limit:
+                self._block_ip(ip, now, f"Upload frequency limit exceeded ({len(uploads_in_window)} uploads/min).")
 
-def brute_force_plugin(protection):
+    def _block_ip(self, ip, now, reason):
+        """Block the IP and raise 403."""
+        print(f"SECURITY: Blocking IP {ip} for reason: {reason}")
+        self.blocked_ips[ip] = now + self.block_duration
+        if ip in self.access_log:
+            del self.access_log[ip]
+        abort(403, f"Security violation: {reason} Access blocked.")
+
+def security_plugin(protection):
     """
-    Bottle plugin to wrap routes and record code access.
+    Bottle plugin to wrap routes and record security events.
     """
     def plugin(callback):
         def wrapper(*args, **kwargs):
-            # Check for 'code' in route parameters
-            if 'code' in kwargs:
-                protection.record_access(kwargs['code'])
+            # Extract action from route name or path if possible
+            # But simpler: use kwargs['code'] for brute force
+            code = kwargs.get('code')
+            
+            # Determine if this is an upload action
+            action = None
+            if hasattr(callback, '__name__') and 'upload' in callback.__name__.lower():
+                action = 'UPLOAD'
+            
+            protection.record_access(code=code, action=action)
             return callback(*args, **kwargs)
         return wrapper
     return plugin

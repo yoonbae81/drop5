@@ -62,17 +62,17 @@ class DictWrapper:
 
 # Brute force protection: Reads from environment variables or uses defaults
 try:
-    from middleware import BruteForceProtection, brute_force_plugin
+    from middleware import SecurityMiddleware, security_plugin
 except ImportError:
-    from src.middleware import BruteForceProtection, brute_force_plugin
+    from src.middleware import SecurityMiddleware, security_plugin
 
-# SECURITY: Use environment variables for configurable brute force protection
-protection = BruteForceProtection(
+# SECURITY: Use environment variables for configurable brute force and rate limit protection
+protection = SecurityMiddleware(
     limit=int(os.getenv('BRUTE_FORCE_LIMIT', '10')),
     window=int(os.getenv('BRUTE_FORCE_WINDOW', '60')),
     block_duration=int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600'))
 )
-app.install(brute_force_plugin(protection))
+app.install(security_plugin(protection))
 
 @app.hook('before_request')
 def check_brute_force():
