@@ -51,21 +51,26 @@ class SecurityMiddleware:
         if os.path.exists(self.block_file):
             try:
                 with open(self.block_file, 'r') as f:
-                    data = json.load(f)
-                    now = time.time()
-                    self.blocked_ips.update({ip: exp for ip, exp in data.items() if exp > now})
-            except:
-                pass
+                    if os.path.getsize(self.block_file) > 0:
+                        data = json.load(f)
+                        now = time.time()
+                        self.blocked_ips.update({ip: exp for ip, exp in data.items() if exp > now})
+            except Exception as e:
+                print(f"SECURITY: Error loading block file: {e}")
 
     def _save_block(self, ip, expiry):
         """Save block to shared file."""
         self._load_blocks() # Refresh
         self.blocked_ips[ip] = expiry
+        
+        # Ensure directory exists before saving
+        os.makedirs(os.path.dirname(self.block_file), exist_ok=True)
+        
         try:
             with open(self.block_file, 'w') as f:
                 json.dump(self.blocked_ips, f)
-        except:
-            pass
+        except Exception as e:
+            print(f"SECURITY: Error saving block file: {e}")
 
     def _load_uas(self):
         """Load blocked UA patterns from the security file."""

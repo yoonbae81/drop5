@@ -97,3 +97,5 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 if not os.path.exists(AUDIT_DIR):
     os.makedirs(AUDIT_DIR, exist_ok=True)
+if not os.path.exists(SECURITY_DIR):
+    os.makedirs(SECURITY_DIR, exist_ok=True)
