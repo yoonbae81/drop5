@@ -182,6 +182,10 @@ def home():
     set_security_headers()
     
     cleanup_all_sessions()
+    
+    # Record session creation for rate limiting
+    protection.record_access(action='CREATE_SESSION')
+    
     code = generate_code()
     # Ensure directory exists before redirecting
     os.makedirs(os.path.join(UPLOAD_DIR, code), exist_ok=True)
@@ -306,6 +310,8 @@ def main_page(code):
     
     # Ensure the directory exists so the user can stay on this code
     if not os.path.exists(code_dir):
+        # Record session creation for rate limiting
+        protection.record_access(action='CREATE_SESSION')
         os.makedirs(code_dir, exist_ok=True)
 
     active_files = get_active_files(code_dir)
@@ -672,6 +678,9 @@ def upload_file(code):
                 'size': actual_size,
                 'hash': file_hash
             })
+            
+            # Record hash for system-wide duplicate detection
+            protection.record_access(action=f"hash:{file_hash}")
     except Exception as e:
         print(f"ERROR: Upload failed for code {code}: {str(e)}")
         import traceback
@@ -856,6 +865,9 @@ def upload_text(code):
             'size': actual_size,
             'hash': file_hash
         })
+        
+        # Record hash for system-wide duplicate detection
+        protection.record_access(action=f"hash:{file_hash}")
 
         return {'success': True, 'filename': os.path.basename(filepath)}
         
