@@ -1,7 +1,7 @@
 import time
 import os
 import ipaddress
-from bottle import request, abort
+from bottle import request, abort, json
 from src.config import TRUSTED_PROXIES
 
 class SecurityMiddleware:
@@ -35,10 +35,33 @@ class SecurityMiddleware:
         self.blocked_ips = {}         # {ip: expiry_timestamp}
         self.first_seen = {}          # {(ip, client_id): timestamp}
         
+        # Static UA Blacklist (Comprehensive)
+        self.blocked_uas = [
+            # Common Library/Tool patterns
+            'python-requests', 'python-urllib', 'requests/', 'urllib/', 'aiohttp', 'httpx',
+            'go-http', 'curl/', 'wget', 'libwww-perl', 'fasthttp', 'httprequest', 'guzzle',
+            'http-client', 'okhttp', 'java/', 'apache-httpclient', 'ruby', 'php/',
+            
+            # Scrapers / Frameworks / Dev Tools
+            'scrapy', 'selenium', 'playwright', 'puppeteer', 'headlesschrome', 'headless',
+            'phantomjs', 'beautifulsoup', 'postman', 'insomnia', 'brutus', 'rest-client',
+            'node-fetch', 'axios', 'faraday/',
+            
+            # AI & SEO Bots
+            'gptbot', 'chatgpt', 'anthropic-ai', 'claudebot', 'mj12bot', 'dotbot', 
+            'rogerbot', 'exabot', 'semrushbot', 'ahrefsbot', 'blexbot', 'petalsbot', 
+            'bytespider', 'dataforseobot', 'petalbot', 'ccbot', 'censys', 'amazonbot',
+            
+            # Security Scanners
+            'sqlmap', 'nmap', 'zgrab', 'netsparker', 'nikto', 'dirbuster', 'gobuster',
+            'burpsuite', 'w3af'
+        ]
+        
         # Initial load and sync
         self._load_blocks()
         
-        # Pruning frequency
+        # Tracking for refresh
+        self.last_sync = time.time()
         self.last_prune = time.time()
 
     def _load_blocks(self):
@@ -77,14 +100,27 @@ class SecurityMiddleware:
         return remote_addr
 
     def check_blocked(self):
-        """Check if the current IP is blocked. Raise 403 if blocked."""
+        """Check if the current IP or User-Agent is blocked. Raise 403 if blocked."""
         ip = self.get_ip()
         now = time.time()
+        ua = request.get_header('User-Agent', '').lower()
         
-        # Periodically refresh from shared file
-        if now - self.last_prune > 5:
+        # Periodically refresh from shared blocks
+        if now - self.last_sync > 60:
             self._load_blocks()
+            self.last_sync = now
 
+        # 1. Check User-Agent Blacklist (Instant)
+        if ua:
+            if any(pattern in ua for pattern in self.blocked_uas):
+                # Log the blocked UA attempt
+                if self.logger_func:
+                    try:
+                         self.logger_func('BLOCK_UA', code=None, client_id=None, ip=ip, details={'ua': ua, 'reason': 'UA Blacklist'})
+                    except: pass
+                abort(403, "Access denied: Malicious tool detected.")
+
+        # 2. Check IP Blocklist
         if ip in self.blocked_ips:
             if now < self.blocked_ips[ip]:
                 abort(403, "Security protection: Access blocked.")
