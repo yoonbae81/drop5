@@ -72,12 +72,13 @@ cp .env.example .env    # 환경 설정 파일 생성 (필요시 수정)
 ```
 
 ### 3. fail2ban 연동 (보안 강화)
-운영 환경(Linux)에서는 `fail2ban`을 연동하여 시스템 레벨에서 무단 접근을 강력하게 차단할 수 있습니다. `drop5`는 보안 이벤트를 감지하면 `audit/audit.log`에 `[SECURITY]` 프리픽스와 함께 로그를 남깁니다.
+운영 환경(Linux)에서는 `fail2ban`을 연동하여 시스템 레벨에서 무단 접근을 강력하게 차단할 수 있습니다. `drop5`는 보안 이벤트를 감지하면 `audit/audit.log`에 `status: BLOCK_IP` 태그가 포함된 로그를 남깁니다.
 
 **1단계: 필터 설정 (`/etc/fail2ban/filter.d/drop5.conf`)**
 ```ini
 [Definition]
-failregex = ^\[SECURITY\] <HOST> - .*$
+# JSON에서 ip와 verdict: BLOCK_IP를 탐지합니다.
+failregex = ^.*"ip": "<HOST>",.*"verdict": "BLOCK_IP".*$
 ignoreregex =
 ```
 
@@ -89,7 +90,7 @@ port    = http,https
 filter  = drop5
 logpath = /path/to/drop5/audit/audit.log
 maxretry = 1
-bantime  = 3600
+bantime  = 2592000
 findtime = 600
 ```
 
@@ -128,7 +129,7 @@ drop5/
 Drop5는 **어플리케이션 계층(L7)**의 정밀한 탐지와 **커널 계층(L3/L4)**의 효율적인 차단을 결합한 하이브리드 보호 모델을 사용합니다.
 
 1.  **탐지 (Python Middleware)**: 실시간으로 행동(Behavioral) 분석을 수행합니다. (예: 1.5초 이내 즉시 업로드, 비정상적 요청 빈도, 금지된 User-Agent 등)
-2.  **기록 (Audit Logger)**: 위반 사례가 확인되면 `audit.log`에 `[SECURITY]` 태그와 함께 IP 정보를 즉시 기록합니다.
+2.  **기록 (Audit Logger)**: 위반 사례가 확인되면 `audit.log`에 `verdict: BLOCK_IP` 태그와 함께 IP 정보를 즉시 기록합니다.
 3.  **차단 (fail2ban/OS)**: 리눅스 환경의 `fail2ban`이 로그를 감시하다가 위반 IP를 발견하는 즉시 `iptables` 또는 `nftables`를 통해 시스템 전체에서 차단합니다.
 4.  **로컬 캐시**: `fail2ban`이 차단하기 전까지의 짧은 간극(Gaps)은 Python 프로세스 내부 메모리 캐시를 통해 즉각 차단하여 보호합니다.
 

@@ -37,20 +37,20 @@ def calculate_file_hash(filepath):
 def log_action(action, code, client_id, ip, details=None):
     """
     Log structured JSON action record.
-    If action is BLOCK_IP, prefix with [SECURITY] for fail2ban visibility.
+    Fields are ordered: timestamp, ip, action, etc. for fail2ban efficiency.
     """
+    # Create an ordered structure
     log_entry = {
-        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()), # Recorded in UTC
-        'action': action,          # UPLOAD, DOWNLOAD, JOIN, DELETE, BLOCK_IP
+        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime()), # UTC
+        'ip': ip,                  # IP Address (Second field for easy parsing)
+        'action': action,          # Original user action (CREATE_SESSION, UPLOAD, etc.)
         'code': code,              # Session code
         'client_id': client_id,    # User ID
-        'ip': ip,                  # IP Address
-        'details': details or {}   # Filename, hash, etc.
+        'details': details or {}   # Filename, reason, etc.
     }
     
-    line = json.dumps(log_entry, ensure_ascii=False)
-    if action == 'BLOCK_IP':
-        # Add a clear prefix and ensure IP is easily findable for fail2ban
-        line = f"[SECURITY] {ip} - {line}"
-    
-    logger.info(line)
+    # If this is a security violation, add a verdict field that fail2ban can trigger on
+    if details and details.get('is_blocked'):
+        log_entry['verdict'] = 'BLOCK_IP'
+        
+    logger.info(json.dumps(log_entry, ensure_ascii=False))

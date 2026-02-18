@@ -83,7 +83,7 @@ class SecurityMiddleware:
         # User-Agent Check
         ua = request.get_header('User-Agent', '').lower()
         if ua and any(pattern in ua for pattern in self.blocked_uas):
-            self._block_ip(ip, now, f"Blacklisted User-Agent: {ua}")
+            self._block_ip(ip, now, f"Blacklisted User-Agent: {ua}", original_action='CHECK_UA')
 
     def record_access(self, code=None, action=None, client_id=None):
         """Record and check access. Minimal in dev."""
@@ -111,54 +111,53 @@ class SecurityMiddleware:
         ip_log = [e for e in self.access_log[ip] if now - e[0] <= 60]
         self.access_log[ip] = ip_log
         
-        # --- DETECTION LOGIC (Simplified: Focus on identifying blocks) ---
+        # --- DETECTION LOGIC ---
         
         # 1. Brute Force
         codes = len(set(e[1] for e in ip_log if e[1].startswith('code:')))
         if codes >= self.code_limit:
-            self._block_ip(ip, now, "Brute Force Attempt")
+            self._block_ip(ip, now, "Brute Force Attempt", original_action=action or 'BRUTE_FORCE')
 
         # 2. Volumetric Attack
         req_count = len([e for e in ip_log if e[1] == 'req'])
         if not client_id:
             if req_count > 60: 
-                self._block_ip(ip, now, "Anonymous Volumetric Attack")
+                self._block_ip(ip, now, "Anonymous Volumetric Attack", original_action=action or 'VOLUME')
             
             sessions = len([e for e in ip_log if e[1] == 'action:CREATE_SESSION'])
             if sessions > 5:
-                self._block_ip(ip, now, "Bot Session Spike")
+                self._block_ip(ip, now, "Bot Session Spike", original_action='CREATE_SESSION')
         else:
             if req_count > self.request_limit:
-                self._block_ip(ip, now, "Aggressive Request Spike")
+                self._block_ip(ip, now, "Aggressive Request Spike", original_action=action or 'SPIKE')
 
         # 3. Fast-Action Protection
         if action == 'UPLOAD':
             if client_id:
                 start_time = self.first_seen.get((ip, client_id))
                 if start_time and (now - start_time) < self.min_upload_delay:
-                    self._block_ip(ip, now, "Bot Behavior (Instant Upload)")
+                    self._block_ip(ip, now, "Bot Behavior (Instant Upload)", original_action='UPLOAD')
             
             uploads = len([e for e in ip_log if e[1] == 'action:UPLOAD'])
             if uploads > self.upload_limit:
-                self._block_ip(ip, now, "Upload Flood Detected")
+                self._block_ip(ip, now, "Upload Flood Detected", original_action='UPLOAD')
 
-    def _block_ip(self, ip, now, reason):
+    def _block_ip(self, ip, now, reason, original_action='SECURITY_VIOLATION'):
         """
         Detect a violation. 
-        Log it so fail2ban can catch it, and reject the current request.
+        Log it as the ORIGINAL action with is_blocked flag for fail2ban.
         """
-        print(f"SECURITY: Block Triggered for {ip}: {reason}")
+        print(f"SECURITY: Block Triggered for {ip}: {reason} during {original_action}")
         
-        # Reject immediately in this process for the next 10 minutes
         self.blocked_ips[ip] = now + 600 
         
-        # LOG FOR FAIL2BAN: This is the crucial part
         if self.logger_func:
             try:
                 ua = request.get_header('User-Agent', 'Unknown')
-                # Fail2ban will look for this 'BLOCK_IP' action
-                self.logger_func('BLOCK_IP', code=None, client_id=None, ip=ip, 
-                               details={'reason': reason, 'ua': ua})
+                # Log using the attempted action name (e.g., CREATE_SESSION)
+                # but with is_blocked=True so audit.py adds "status": "BLOCK_IP"
+                self.logger_func(original_action, code=None, client_id=None, ip=ip, 
+                               details={'reason': reason, 'ua': ua, 'is_blocked': True})
             except:
                 pass
 
