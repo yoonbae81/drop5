@@ -27,12 +27,40 @@ class SecurityMiddleware:
         self.block_duration = block_duration if block_duration is not None else int(os.getenv('BRUTE_FORCE_BLOCK_DURATION', '3600'))
         
         # Logs
+        # Shared Block File (For multi-process sync)
+        self.block_file = os.path.join(os.getenv('AUDIT_DIR', 'audit'), 'blocked_ips.json')
+        
+        # Logs
         self.access_log = {}         # {ip: [(timestamp, type_id), ...]}
         self.blocked_ips = {}         # {ip: expiry_timestamp}
         self.first_seen = {}          # {(ip, client_id): timestamp}
         
+        # Initial load and sync
+        self._load_blocks()
+        
         # Pruning frequency
         self.last_prune = time.time()
+
+    def _load_blocks(self):
+        """Load blocked IPs from shared file for multi-process sync."""
+        if os.path.exists(self.block_file):
+            try:
+                with open(self.block_file, 'r') as f:
+                    data = json.load(f)
+                    now = time.time()
+                    self.blocked_ips.update({ip: exp for ip, exp in data.items() if exp > now})
+            except:
+                pass
+
+    def _save_block(self, ip, expiry):
+        """Save block to shared file."""
+        self._load_blocks() # Refresh
+        self.blocked_ips[ip] = expiry
+        try:
+            with open(self.block_file, 'w') as f:
+                json.dump(self.blocked_ips, f)
+        except:
+            pass
 
     def get_ip(self):
         """Get the client's IP address, handling potential reverse proxies securely."""
@@ -53,13 +81,14 @@ class SecurityMiddleware:
         ip = self.get_ip()
         now = time.time()
         
+        # Periodically refresh from shared file
+        if now - self.last_prune > 5:
+            self._load_blocks()
+
         if ip in self.blocked_ips:
             if now < self.blocked_ips[ip]:
-                remaining_sec = int(self.blocked_ips[ip] - now)
-                msg = f"Security protection: Access denied. Try again in {remaining_sec} seconds."
-                abort(403, msg)
+                abort(403, "Security protection: Access blocked.")
             else:
-                print(f"SECURITY: Block expired for IP {ip}")
                 del self.blocked_ips[ip]
 
     def record_access(self, code=None, action=None, client_id=None):
@@ -115,26 +144,31 @@ class SecurityMiddleware:
         # 4. Behavioral: Multiple Session Creation
         if action == 'CREATE_SESSION':
             sessions = len([e for e in ip_log if e[1] == 'action:CREATE_SESSION'])
-            # Anonymous bot protection: If no client_id, be extremely strict
-            if not client_id and sessions > 2:
-                self._block_ip(ip, now, "Anonymous Session Spamming")
+            ua = request.get_header('User-Agent', '').lower()
+            is_bot_ua = not ua or any(x in ua for x in ['python', 'go-http', 'curl', 'wget', 'aiohttp'])
+            
+            # Anonymous or Bot-like: Max 1 per minute
+            if (not client_id or is_bot_ua) and sessions > 1:
+                self._block_ip(ip, now, "Bot Session Spamming")
             elif sessions > 5:
                 self._block_ip(ip, now, "Session Spamming Detected")
 
     def _block_ip(self, ip, now, reason):
         """Block the IP and raise 403."""
         print(f"SECURITY: Blocking IP {ip} for reason: {reason}")
+        expiry = now + self.block_duration
         
-        # Log the block action to audit log if logger is provided
+        # Persistence across workers
+        self._save_block(ip, expiry)
+        
+        # Log the block action
         if self.logger_func:
             try:
-                self.logger_func('BLOCK_IP', code=None, client_id=None, ip=ip, details={'reason': reason})
+                ua = request.get_header('User-Agent', 'Unknown')
+                self.logger_func('BLOCK_IP', code=None, client_id=None, ip=ip, details={'reason': reason, 'ua': ua})
             except:
                 pass
 
-        self.blocked_ips[ip] = now + self.block_duration
-        if ip in self.access_log:
-            del self.access_log[ip]
         abort(403, f"Security violation: {reason}. Access blocked.")
 
     def _prune_logs(self, now):
