@@ -115,7 +115,10 @@ class SecurityMiddleware:
         # 4. Behavioral: Multiple Session Creation
         if action == 'CREATE_SESSION':
             sessions = len([e for e in ip_log if e[1] == 'action:CREATE_SESSION'])
-            if sessions > 5: # Max 5 new sessions/min per IP
+            # Anonymous bot protection: If no client_id, be extremely strict
+            if not client_id and sessions > 2:
+                self._block_ip(ip, now, "Anonymous Session Spamming")
+            elif sessions > 5:
                 self._block_ip(ip, now, "Session Spamming Detected")
 
     def _block_ip(self, ip, now, reason):

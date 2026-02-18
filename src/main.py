@@ -189,8 +189,11 @@ def home():
     
     code = generate_code()
     
+    # Attempt to capture client_id from query/json if available
+    client_id = request.query.get('clientId') or (request.json.get('clientId') if request.json else None)
+    
     # Audit logging for session creation
-    log_action('CREATE_SESSION', code, None, get_client_ip())
+    log_action('CREATE_SESSION', code, client_id, get_client_ip())
     
     # Ensure directory exists before redirecting
     os.makedirs(os.path.join(UPLOAD_DIR, code), exist_ok=True)
@@ -318,8 +321,11 @@ def main_page(code):
         # Record session creation for rate limiting
         protection.record_access(action='CREATE_SESSION')
         
+        # Attempt to capture client_id from query/json if available
+        client_id = request.query.get('clientId') or (request.json.get('clientId') if request.json else None)
+        
         # Audit logging for session creation
-        log_action('CREATE_SESSION', code, None, get_client_ip())
+        log_action('CREATE_SESSION', code, client_id, get_client_ip())
         
         os.makedirs(code_dir, exist_ok=True)
 
