@@ -7,8 +7,29 @@ import fcntl
 from src.config import UPLOAD_DIR, FILE_TIMEOUT
 from src.utils import format_size
 
-def get_session_size(code_dir):
-    """Calculate the total size of files in a session directory."""
+def get_session_size(code_dir, use_cache=True):
+    """Calculate the total size of files in a session directory.
+
+    Args:
+        code_dir: Session directory path
+        use_cache: If True, try to use cached value from session state (default: True)
+
+    Returns:
+        Total size in bytes
+    """
+    # Try cache first if enabled
+    if use_cache:
+        try:
+            state = load_session_state(code_dir)
+            cached_size = state.get('total_size')
+            if cached_size is not None:
+                # Verify cache is reasonably recent (within last hour)
+                if time.time() - state.get('last_updated', 0) < 3600:
+                    return cached_size
+        except Exception:
+            pass  # Fall back to direct calculation
+
+    # Direct calculation
     total_size = 0
     if os.path.exists(code_dir):
         for filename in os.listdir(code_dir):
@@ -18,6 +39,16 @@ def get_session_size(code_dir):
                     total_size += os.path.getsize(filepath)
                 except OSError:
                     pass
+
+    # Update cache if we calculated directly
+    if use_cache and total_size > 0:
+        try:
+            def update_cache(state):
+                state['total_size'] = total_size
+            update_session_state(code_dir, update_cache)
+        except Exception:
+            pass  # Cache update is optional
+
     return total_size
 
 def cleanup_session(code_dir):
@@ -287,3 +318,46 @@ def clear_session_files(code_dir):
                 print(f"  Deleted dir: {filename}")
         except Exception as e:
             print(f"  Error deleting {filename}: {e}")
+    # Reset cache after clearing files
+    update_session_size_cache(code_dir, 0)
+
+
+def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True):
+    """Update the cached total size for a session.
+
+    Args:
+        code_dir: Session directory path
+        delta_bytes: Size change in bytes (or absolute size if file_path provided)
+        file_path: If provided, calculate delta from this file
+        is_add: True if file was added, False if removed
+
+    Returns:
+        Updated total size
+    """
+    try:
+        state = load_session_state(code_dir)
+        current_total = state.get('total_size', 0)
+
+        if file_path and os.path.exists(file_path):
+            # Calculate delta from actual file
+            actual_size = os.path.getsize(file_path)
+            if is_add:
+                # Add file size to cache
+                new_total = current_total + actual_size
+            else:
+                # Remove file size from cache
+                new_total = max(0, current_total - actual_size)
+        else:
+            # Use explicit delta
+            if is_add:
+                new_total = current_total + delta_bytes
+            else:
+                new_total = max(0, current_total - delta_bytes)
+
+        def update_cache(s):
+            s['total_size'] = new_total
+        update_session_state(code_dir, update_cache)
+        return new_total
+    except Exception as e:
+        print(f"Error updating size cache: {e}")
+        return None

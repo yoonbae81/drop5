@@ -26,7 +26,7 @@ from src.session import (
     get_session_size, cleanup_session, cleanup_all_sessions,
     get_active_files, load_session_state, save_session_state,
     cleanup_stale_clients, is_client_approved, clear_session_files,
-    update_session_state
+    update_session_state, update_session_size_cache
 )
 from src.audit import log_action, calculate_file_hash
 from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info, SUPPORTED_LANGUAGES, search_country
@@ -679,7 +679,10 @@ def upload_file(code):
             upload.save(filepath, overwrite=True)
             uploaded_count += 1
             print(f"Saved file: {normalized_filename}")
-            
+
+            # Update session size cache (performance optimization)
+            update_session_size_cache(code_dir, 0, file_path=filepath, is_add=True)
+
             # Log upload action
             file_hash = calculate_file_hash(filepath)
             ip = get_client_ip()
@@ -688,7 +691,7 @@ def upload_file(code):
                 'size': actual_size,
                 'hash': file_hash
             })
-            
+
             # Record hash for system-wide duplicate detection
             protection.record_access(action=f"hash:{file_hash}")
     except Exception as e:
