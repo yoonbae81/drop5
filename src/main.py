@@ -726,21 +726,21 @@ def upload_file(code):
 def delete_all_files(code):
     """Delete all files in a session."""
     set_security_headers()
-    
+
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
         return {'success': False, 'error': 'Invalid code'}
-    
+
     code_dir = os.path.join(UPLOAD_DIR, code)
-    
+
     # Check Client Approval
     client_id = request.forms.get('clientId') or request.json.get('clientId')
-    
+
     # SECURITY: Validate client ID format
     if not validate_client_id(client_id):
         response.status = 400
         return {'success': False, 'error': 'Invalid client ID format'}
-    
+
     # Check Client Approval
     if not check_approval_or_auto_approve(code, client_id, code_dir):
         response.status = 403
@@ -754,7 +754,11 @@ def delete_all_files(code):
                     os.remove(filepath)
                 except OSError:
                     pass
-    
+
+        # PERFORMANCE FIX: Reset session size cache after deleting all files
+        # This prevents incorrect size reporting and storage limit enforcement
+        update_session_size_cache(code_dir, 0, set_absolute=0)
+
     # Log delete action
     ip = get_client_ip()
     log_action('DELETE_ALL', code, client_id, ip, {'count': len(os.listdir(code_dir)) if os.path.exists(code_dir) else 0})

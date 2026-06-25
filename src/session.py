@@ -68,6 +68,7 @@ def cleanup_session(code_dir):
     now = time.time()
     files_active = False
     real_files_count = 0
+    deleted_size = 0  # Track total size of deleted files for cache update
 
     try:
         # Single scandir() call for both cleanup and empty check
@@ -88,6 +89,8 @@ def cleanup_session(code_dir):
                     try:
                         stat = entry.stat()
                         if now - stat.st_mtime > FILE_TIMEOUT:
+                            # Track size before deletion for cache update
+                            deleted_size += stat.st_size
                             os.remove(entry.path)
                             real_files_count -= 1
                         else:
@@ -96,6 +99,13 @@ def cleanup_session(code_dir):
                         pass  # Ignore race conditions
     except OSError:
         return False
+
+    # PERFORMANCE FIX: Update session size cache if files were deleted
+    if deleted_size > 0:
+        try:
+            update_session_size_cache(code_dir, deleted_size, is_add=False)
+        except Exception:
+            pass  # Cache update is optional
 
     # Remove session if empty and no active files
     if real_files_count == 0 and not files_active:
@@ -364,10 +374,10 @@ def clear_session_files(code_dir):
         except Exception as e:
             print(f"  Error deleting {filename}: {e}")
     # Reset cache after clearing files
-    update_session_size_cache(code_dir, 0)
+    update_session_size_cache(code_dir, 0, set_absolute=0)
 
 
-def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True):
+def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True, set_absolute=None):
     """Update the cached total size for a session.
 
     PERFORMANCE OPTIMIZED: Uses single atomic update instead of separate load+update.
@@ -378,18 +388,25 @@ def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True
         delta_bytes: Size change in bytes (or absolute size if file_path provided)
         file_path: If provided, calculate delta from this file
         is_add: True if file was added, False if removed
+        set_absolute: If provided, set cache to this absolute value (ignores delta_bytes)
 
     Returns:
         Updated total size or None on error
     """
     try:
-        # Pre-calculate file size if needed
-        file_size = None
-        if file_path and os.path.exists(file_path):
-            file_size = os.path.getsize(file_path)
-
         result = [None]
         def update_cache(state):
+            if set_absolute is not None:
+                # Set to absolute value
+                state['total_size'] = set_absolute
+                result[0] = set_absolute
+                return
+
+            # Pre-calculate file size if needed
+            file_size = None
+            if file_path and os.path.exists(file_path):
+                file_size = os.path.getsize(file_path)
+
             current_total = state.get('total_size', 0)
 
             if file_size is not None:
