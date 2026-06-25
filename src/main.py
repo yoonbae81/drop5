@@ -173,9 +173,12 @@ def files_api(code):
 def home():
     """Generate session and redirect."""
     set_security_headers()
-    
-    cleanup_all_sessions()
-    
+
+    # Note: cleanup_all_sessions() removed for performance.
+    # Individual sessions are cleaned up on access via cleanup_session()
+    # called in main_page(), files_api(), and download() routes.
+    # This prevents expensive full-directory scans on every homepage visit.
+
     # Record session creation for rate limiting
     protection.record_access(action='CREATE_SESSION')
     
