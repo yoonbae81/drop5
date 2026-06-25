@@ -10,6 +10,11 @@ from src.utils import format_size
 def get_session_size(code_dir, use_cache=True):
     """Calculate the total size of files in a session directory.
 
+    PERFORMANCE OPTIMIZED:
+    - Cache is always trusted when use_cache=True (no expiration check)
+    - Cache is invalidated only when files are added/removed via update_session_size_cache()
+    - This eliminates redundant directory scans during uploads
+
     Args:
         code_dir: Session directory path
         use_cache: If True, try to use cached value from session state (default: True)
@@ -22,14 +27,13 @@ def get_session_size(code_dir, use_cache=True):
         try:
             state = load_session_state(code_dir)
             cached_size = state.get('total_size')
+            # Trust cache if present (updated on every file add/remove)
             if cached_size is not None:
-                # Verify cache is reasonably recent (within last hour)
-                if time.time() - state.get('last_updated', 0) < 3600:
-                    return cached_size
+                return cached_size
         except Exception:
             pass  # Fall back to direct calculation
 
-    # Direct calculation
+    # Direct calculation (only when cache is missing)
     total_size = 0
     if os.path.exists(code_dir):
         for filename in os.listdir(code_dir):
@@ -41,10 +45,11 @@ def get_session_size(code_dir, use_cache=True):
                     pass
 
     # Update cache if we calculated directly
-    if use_cache and total_size > 0:
+    if use_cache:
         try:
+            final_size = total_size
             def update_cache(state):
-                state['total_size'] = total_size
+                state['total_size'] = final_size
             update_session_state(code_dir, update_cache)
         except Exception:
             pass  # Cache update is optional
