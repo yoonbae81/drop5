@@ -60,38 +60,16 @@ class DictWrapper:
             return self._data[name]
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-# Brute force protection: Reads from environment variables or uses defaults
+# Security Middleware (CrowdSec handles brute force, DoS, IP blocking, UA filtering)
+# This middleware provides extensibility and audit logging integration
 try:
     from middleware import SecurityMiddleware, security_plugin
 except ImportError:
     from src.middleware import SecurityMiddleware, security_plugin
-from src.security.ua_blocker import UABlockerPlugin
-from src.security.brute_force_protection import BruteForcePlugin
 
-# Try to import sensitive plugins (not in public repo)
-try:
-    from src.security.dos_protection import DosProtectionPlugin
-except ImportError:
-    DosProtectionPlugin = None
-
-# SECURITY: Use environment variables for simplified behavioral protection
-# SECURITY: Initialize middleware container and register plugins
+# Initialize middleware (audit logging preserved for compliance)
 protection = SecurityMiddleware(logger_func=log_action)
-
-# Register Core Plugins
-protection.register_plugin(UABlockerPlugin())
-protection.register_plugin(BruteForcePlugin(limit=int(os.getenv('BRUTE_FORCE_LIMIT', '10'))))
-
-# Register Advanced Protection (if available)
-if DosProtectionPlugin:
-    protection.register_plugin(DosProtectionPlugin())
-else:
-    print("WARNING: DosProtectionPlugin not found. Advanced DoS protection is disabled.")
 app.install(security_plugin(protection))
-
-@app.hook('before_request')
-def check_brute_force():
-    protection.check_blocked()
 
 @app.error(500)
 def error500(error):

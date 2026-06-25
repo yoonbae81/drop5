@@ -1,146 +1,87 @@
-import time
-import os
-import platform
-from bottle import request, abort
-import json
-from src.config import BLOCKED_UA_FILE, DEBUG
-from src.utils import get_client_ip
+"""
+Simplified Security Middleware for CrowdSec environment.
+
+CrowdSec handles: Brute force, DoS/DDoS, IP blocking, User-Agent filtering
+This middleware: Provides plugin interface and audit logging integration
+"""
+
+from bottle import request
+from src.config import DEBUG
+
 
 class SecurityMiddleware:
     def __init__(self, logger_func=None):
         """
         Initialize security middleware container.
-        Actual security logic is delegated to registered plugins.
+        Security enforcement is delegated to CrowdSec.
+        Audit logging is preserved for compliance.
         """
         self.logger_func = logger_func
         self.is_dev = DEBUG
         self.plugins = []
-        
-        # Internal state for behavioral analysis
-        # Shared across plugins to provide context
-        self.access_log = {}         # {ip: [log_entry, ...]}
-        self.blocked_ips = {}        # {ip: expiry_timestamp}
-        self.last_prune = time.time()
 
     def register_plugin(self, plugin):
-        """Register a security plugin."""
+        """Register a custom security plugin (extensibility)."""
         self.plugins.append(plugin)
 
     def check_blocked(self):
-        """Check if blocked by IP (Local Cache) or Plugin Immediate Check."""
-        if self.is_dev: return
+        """
+        IP blocking is handled by CrowdSec bouncer.
+        This method is kept for plugin compatibility only.
+        """
+        if self.is_dev:
+            return
 
-        ip = get_client_ip()
-        now = time.time()
-        
-        # Check local memory cache
-        if ip in self.blocked_ips:
-            if now < self.blocked_ips[ip]:
-                abort(403, "Security protection: Access blocked.")
-            else:
-                del self.blocked_ips[ip]
-
-        # Run immediate checks (stateless, fast) from plugins
-        for plugin in self.plugins:
-            # Plugins block if check_immediate returns True
-            should_block, reason, details = plugin.check_immediate(request, ip)
-            if should_block:
-                self._block_ip(ip, now, reason, 'IMMEDIATE_CHECK', details)
-                # _block_ip calls abort(), so execution stops here
+        # Plugin immediate checks (extensibility hook)
+        if self.plugins:
+            ip = self._get_client_ip()
+            for plugin in self.plugins:
+                should_block, reason, details = plugin.check_immediate(request, ip)
+                if should_block:
+                    self._log_security_block(ip, reason, details)
+                    from bottle import abort
+                    abort(403, f"Security violation: {reason}")
 
     def record_access(self, code=None, action=None, client_id=None):
         """
-        Record access and run security plugins.
+        Record access for audit logging (CrowdSec handles security enforcement).
+        This preserves compliance logging: who uploaded/downloaded what files.
         """
-        if self.is_dev: return
+        # Audit logging is handled directly in main.py via log_action()
+        # This method is a no-op in CrowdSec environment but kept for compatibility
+        pass
 
-        ip = get_client_ip()
-        if not ip: return
-        
-        now = time.time()
-        
-        # 1. Maintenance
-        if now - self.last_prune > 300: self._prune_logs(now)
-        
-        # 2. Record Event
-        if ip not in self.access_log:
-            self.access_log[ip] = []
-            
-        event = {
-            'timestamp': now,
-            'action': action,
-            'code': code,
-            'client_id': client_id
-        }
-        self.access_log[ip].append(event)
-        
-        # Keep only recent history (last 60s) for analysis
-        self.access_log[ip] = [e for e in self.access_log[ip] if now - e['timestamp'] <= 60]
-        history = self.access_log[ip]
+    def _get_client_ip(self):
+        """Get client IP address."""
+        from src.utils import get_client_ip
+        return get_client_ip()
 
-        # 3. Run Plugins (Behavioral Analysis)
-        for plugin in self.plugins:
-            try:
-                # Plugins return (actions_to_block, reason, details)
-                should_block, reason, details = plugin.inspect(request, ip, history)
-                if should_block:
-                    self._block_ip(ip, now, reason, action, details)
-                    break # Stop after first block
-            except Exception as e:
-                print(f"SECURITY: Plugin {plugin.name} error: {e}")
-
-    def _block_ip(self, ip, now, reason, original_action, details=None):
-        """
-        Execute block and log verdict.
-        """
-        print(f"SECURITY: Block Triggered for {ip}: {reason} during {original_action}")
-        
-        # Local Block (10 min)
-        self.blocked_ips[ip] = now + 600 
-        
-        # Log for fail2ban
+    def _log_security_block(self, ip, reason, details):
+        """Log security block event for audit trail."""
         if self.logger_func:
             try:
-                ua = request.get_header('User-Agent', 'Unknown')
                 log_details = details or {}
                 log_details.update({
-                    'reason': reason, 
-                    'ua': ua, 
-                    'is_blocked': True # Trigger for verdict: BLOCK_IP
+                    'reason': reason,
+                    'ua': request.get_header('User-Agent', 'Unknown'),
+                    'is_blocked': True
                 })
-                
-                self.logger_func(original_action or 'MALICIOUS_ACCESS', 
-                               code=None, client_id=None, ip=ip, 
-                               details=log_details)
-            except:
-                pass
+                self.logger_func('MALICIOUS_ACCESS', code=None, client_id=None, ip=ip, details=log_details)
+            except Exception as e:
+                print(f"Audit log error: {e}")
 
-        abort(403, f"Security violation: {reason}. Access blocked.")
-
-    def _prune_logs(self, now):
-        """Cleanup memory state."""
-        self.last_prune = now
-        self.access_log = {ip: [e for e in l if now - e['timestamp'] <= 60] 
-                          for ip, l in self.access_log.items()}
-        self.access_log = {ip: l for ip, l in self.access_log.items() if l}
-        self.blocked_ips = {ip: exp for ip, exp in self.blocked_ips.items() if now < exp}
 
 def security_plugin(protection):
+    """Bottle plugin wrapper for security middleware."""
     def plugin(callback):
         def wrapper(*args, **kwargs):
-            if protection.is_dev: return callback(*args, **kwargs)
-            
-            # 1. Immediate Check (Start of request)
-            # Must run before logging to prevent "late blocking" logs
+            if protection.is_dev:
+                return callback(*args, **kwargs)
+
+            # Security checks (handled by CrowdSec)
             protection.check_blocked()
-            
-            client_id = None
-            if request.json: client_id = request.json.get('clientId')
-            if not client_id:
-                client_id = request.forms.get('clientId') or request.query.get('clientId')
-            
-            action = 'UPLOAD' if (hasattr(callback, '__name__') and 'upload' in callback.__name__.lower()) else None
-            protection.record_access(code=kwargs.get('code'), action=action, client_id=client_id)
+
+            # Audit logging is handled per-action in main.py
             return callback(*args, **kwargs)
         return wrapper
     return plugin
