@@ -746,22 +746,26 @@ def delete_all_files(code):
         response.status = 403
         return {'success': False, 'error': 'Unauthorized'}
 
+    deleted_count = 0
     if os.path.exists(code_dir):
-        for filename in os.listdir(code_dir):
+        files_to_delete = [f for f in os.listdir(code_dir)
+                          if os.path.isfile(os.path.join(code_dir, f))]
+        deleted_count = len(files_to_delete)
+
+        for filename in files_to_delete:
             filepath = os.path.join(code_dir, filename)
-            if os.path.isfile(filepath):
-                try:
-                    os.remove(filepath)
-                except OSError:
-                    pass
+            try:
+                os.remove(filepath)
+            except OSError:
+                pass
 
         # PERFORMANCE FIX: Reset session size cache after deleting all files
         # This prevents incorrect size reporting and storage limit enforcement
         update_session_size_cache(code_dir, 0, set_absolute=0)
 
-    # Log delete action
+    # Log delete action with actual deleted count
     ip = get_client_ip()
-    log_action('DELETE_ALL', code, client_id, ip, {'count': len(os.listdir(code_dir)) if os.path.exists(code_dir) else 0})
+    log_action('DELETE_ALL', code, client_id, ip, {'count': deleted_count})
 
     response.set_header('Content-Type', 'application/json')
     return {'success': True}
