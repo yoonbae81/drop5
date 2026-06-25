@@ -1,7 +1,7 @@
 import os
 import ipaddress
 import re
-import random
+import secrets  # Cryptographically secure random number generator
 import unicodedata
 import urllib.parse
 from bottle import response, request
@@ -165,14 +165,15 @@ def sanitize_session_code(code):
 
 def generate_code():
     """Generate a unique 5-character alphanumeric code.
-    
-    SECURITY: Using alphanumeric characters (a-z, A-Z, 0-9) with case sensitivity
-    for better security than numeric-only codes. 62^5 = ~916 million combinations.
+
+    SECURITY: Using secrets module for cryptographically secure random generation.
+    Alphanumeric (a-z, A-Z, 0-9) with case sensitivity for 62^5 = ~916M combinations.
     """
     # Characters: lowercase (26) + uppercase (26) + digits (10) = 62 total
     chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     while True:
-        code = ''.join(random.choices(chars, k=5))
+        # Use secrets.choice() for cryptographically secure random selection
+        code = ''.join(secrets.choice(chars) for _ in range(5))
         if not os.path.exists(os.path.join(UPLOAD_DIR, code)):
             return code
 
