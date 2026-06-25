@@ -17,16 +17,8 @@ PORT = int(os.getenv('PORT', 5555))
 # SECURITY: Default to false in production to prevent information disclosure
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 
-# REGION-BASED RESTRICTIONS
-# List of country codes (ISO alpha-2) to operate in restricted mode
-# Common sources of abuse: RU (Russia), UA (Ukraine), BY (Belarus), VN (Vietnam), CN (China), ID (Indonesia), PK (Pakistan)
-RESTRICTED_COUNTRIES = set(
-    c.strip().upper() 
-    for c in os.getenv('RESTRICTED_COUNTRIES', '').split(',') 
-    if c.strip()
-)
-MAX_FILES_NORMAL = int(os.getenv('MAX_FILES_NORMAL', '30'))
-MAX_FILES_RESTRICTED = int(os.getenv('MAX_FILES_RESTRICTED', '5'))
+# Maximum files per session (country-based restrictions handled by CrowdSec)
+MAX_FILES = int(os.getenv('MAX_FILES', '30'))
 
 # SECURITY: Trusted proxies for IP detection (comma-separated list of IPs or CIDR networks)
 # Only trust X-Forwarded-For if it comes from these networks.

@@ -14,7 +14,7 @@ except ImportError:
 from src.config import (
     UPLOAD_DIR, FILE_TIMEOUT, MAX_FILE_SIZE, MAX_STORAGE_SIZE,
     PORT, DEBUG, BASE_URL, URL_PREFIX, DEFAULT_LANGUAGE, LANGUAGE_COOKIE_NAME,
-    UMAMI_ID, UMAMI_URL, RESTRICTED_COUNTRIES, MAX_FILES_NORMAL, MAX_FILES_RESTRICTED,
+    UMAMI_ID, UMAMI_URL, MAX_FILES,
     CONTACT_EMAIL, COMPANY_NAME
 )
 from src.utils import (
@@ -29,7 +29,7 @@ from src.session import (
     update_session_state, update_session_size_cache
 )
 from src.audit import log_action, calculate_file_hash
-from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info, SUPPORTED_LANGUAGES, search_country
+from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info, SUPPORTED_LANGUAGES
 
 app = Bottle()
 
@@ -624,18 +624,12 @@ def upload_file(code):
         os.makedirs(code_dir, exist_ok=True)
 
     print(f"Uploading files for code: {code}")
-    
-    # Check origin country for file limit
-    ip = get_client_ip()
-    country = search_country(ip)
-    is_restricted = country in RESTRICTED_COUNTRIES
-    file_limit = MAX_FILES_RESTRICTED if is_restricted else MAX_FILES_NORMAL
-    
+
+    # Check file count limit (country restrictions handled by CrowdSec)
     existing_files = get_active_files(code_dir)
-    if len(existing_files) + len(uploads) > file_limit:
-        mode_str = '제한' if is_restricted else '일반' if user_lang == 'ko' else 'restricted' if is_restricted else 'normal'
+    if len(existing_files) + len(uploads) > MAX_FILES:
         error_msg = translations.get('file_count_exceeded', 'File count limit exceeded')
-        error_msg = error_msg.replace('{{mode}}', mode_str).replace('{{limit}}', str(file_limit))
+        error_msg = error_msg.replace('{{limit}}', str(MAX_FILES))
         return {'success': False, 'error': error_msg}
 
     uploaded_count = 0
@@ -811,17 +805,11 @@ def upload_text(code):
         if not content.strip():
             return {'success': False, 'error': translations.get('enter_content', 'No recognizable text')}
             
-        # Check origin country for file limit
-        ip = get_client_ip()
-        country = search_country(ip)
-        is_restricted = country in RESTRICTED_COUNTRIES
-        file_limit = MAX_FILES_RESTRICTED if is_restricted else MAX_FILES_NORMAL
-        
+        # Check file count limit (country restrictions handled by CrowdSec)
         existing_files = get_active_files(code_dir)
-        if len(existing_files) + 1 > file_limit:
-            mode_str = '제한' if is_restricted else '일반' if user_lang == 'ko' else 'restricted' if is_restricted else 'normal'
+        if len(existing_files) + 1 > MAX_FILES:
             error_msg = translations.get('file_count_exceeded', 'File count limit exceeded')
-            error_msg = error_msg.replace('{{mode}}', mode_str).replace('{{limit}}', str(file_limit))
+            error_msg = error_msg.replace('{{limit}}', str(MAX_FILES))
             return {'success': False, 'error': error_msg}
 
         # Naming logic: first 10 characters of the first line
