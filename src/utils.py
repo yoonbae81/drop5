@@ -2,6 +2,7 @@ import os
 import ipaddress
 import re
 import secrets  # Cryptographically secure random number generator
+import time
 import unicodedata
 import urllib.parse
 from bottle import response, request
@@ -163,19 +164,97 @@ def sanitize_session_code(code):
         return None
     return sanitized[:128]
 
+# Performance optimization: In-memory cache of used session codes
+# Reduces file system checks from potentially thousands to just directory scans
+_used_codes = None
+_last_cache_refresh = 0
+_CACHE_REFRESH_INTERVAL = 10  # seconds
+
+def _refresh_used_codes_cache():
+    """Refresh the in-memory cache of used codes from the file system.
+
+    This is called periodically or when code generation struggles to find a free code.
+    Scanning the directory once is O(n) vs O(n) file existence checks in the old implementation.
+    """
+    global _used_codes, _last_cache_refresh
+
+    if not os.path.exists(UPLOAD_DIR):
+        _used_codes = set()
+        _last_cache_refresh = time.time()
+        return
+
+    # Use os.scandir() for efficient directory iteration
+    new_codes = set()
+    try:
+        with os.scandir(UPLOAD_DIR) as entries:
+            for entry in entries:
+                if entry.is_dir() and not entry.name.startswith('.'):
+                    new_codes.add(entry.name)
+    except OSError:
+        new_codes = set()
+
+    _used_codes = new_codes
+    _last_cache_refresh = time.time()
+
+def _mark_code_used(code):
+    """Mark a code as used in the in-memory cache."""
+    global _used_codes
+    if _used_codes is not None:
+        _used_codes.add(code)
+
 def generate_code():
     """Generate a unique 5-character alphanumeric code.
 
     SECURITY: Using secrets module for cryptographically secure random generation.
     Alphanumeric (a-z, A-Z, 0-9) with case sensitivity for 62^5 = ~916M combinations.
+
+    PERFORMANCE: Uses in-memory cache to reduce file system operations.
+    - Cache is refreshed periodically or when needed
+    - Falls back to file system check if cache is stale
     """
+    global _used_codes, _last_cache_refresh
+
+    # Initialize cache on first call
+    if _used_codes is None:
+        _refresh_used_codes_cache()
+
+    # Refresh cache if it's stale (periodic refresh)
+    now = time.time()
+    if now - _last_cache_refresh > _CACHE_REFRESH_INTERVAL:
+        _refresh_used_codes_cache()
+
     # Characters: lowercase (26) + uppercase (26) + digits (10) = 62 total
     chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    while True:
-        # Use secrets.choice() for cryptographically secure random selection
+
+    # Try up to 50 times using in-memory cache
+    max_attempts = 50
+    for _ in range(max_attempts):
+        code = ''.join(secrets.choice(chars) for _ in range(5))
+
+        # Fast path: check in-memory cache first
+        if code not in _used_codes:
+            # Verify with file system check (in case cache is slightly stale)
+            code_path = os.path.join(UPLOAD_DIR, code)
+            if not os.path.exists(code_path):
+                _mark_code_used(code)
+                return code
+            # Code exists on disk but not in cache - update cache
+            _used_codes.add(code)
+
+    # If we couldn't find a free code after many attempts, refresh and try again
+    # This handles the edge case where the directory is very full
+    _refresh_used_codes_cache()
+
+    # With 62^5 possible codes, if we're here something is wrong
+    # Fall back to the original behavior but with a safety limit
+    for attempt in range(1000):
         code = ''.join(secrets.choice(chars) for _ in range(5))
         if not os.path.exists(os.path.join(UPLOAD_DIR, code)):
+            _mark_code_used(code)
             return code
+
+    # Extremely unlikely: we've exhausted all reasonable attempts
+    raise RuntimeError("Unable to generate unique session code - directory may be full")
 
 def validate_client_id(client_id):
     """Validate client ID format to prevent injection attacks.
