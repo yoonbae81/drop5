@@ -44,8 +44,23 @@ for p in os.getenv('TRUSTED_PROXIES', '').split(','):
 # SECURITY: Blocked file extensions to prevent malicious file uploads
 # Read from BLOCKED_FILE_EXTENSIONS environment variable (comma-separated, without leading dot)
 # Default: Block executable files and potentially dangerous file types
+# Categories:
+# - Windows executables: exe, bat, cmd, com, pif, scr, vbs, msi, app
+# - PowerShell scripts: ps1, ps1xml, psc1, psm1, cdxml
+# - Office with macros: docm, dotm, xlsm, xltm, xlam, pptm, potm, ppsm, sldm
+# - Other scripts: js, jse, wsf, wsh
+# - Other dangerous: dll, sys, cpl, deb, gid, inf, ini, url, zone
 DEFAULT_BLOCKED_EXTENSIONS = [
-    'exe', 'bat', 'cmd', 'com', 'pif', 'scr', 'vbs', 'msi', 'jar', 'app'
+    # Windows Executables
+    'exe', 'bat', 'cmd', 'com', 'pif', 'scr', 'vbs', 'msi', 'jar', 'app', 'dll', 'sys', 'cpl',
+    # PowerShell
+    'ps1', 'ps1xml', 'psc1', 'psm1', 'cdxml',
+    # Microsoft Office with Macros (macro can contain malware)
+    'docm', 'dotm', 'xlsm', 'xltm', 'xlam', 'pptm', 'potm', 'ppsm', 'sldm',
+    # Other Scripts
+    'js', 'jse', 'wsf', 'wsh',
+    # Other dangerous
+    'deb', 'gid', 'inf', 'ini', 'url', 'zone'
 ]
 BLOCKED_FILE_EXTENSIONS = set(
     f'.{ext.strip().lower()}'
