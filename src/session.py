@@ -127,12 +127,18 @@ def get_active_files(code_dir):
             filepath = os.path.join(code_dir, filename)
             expiry_time = mtime + FILE_TIMEOUT
             remaining = expiry_time - now
-            
+
             if remaining > 0:
+                # Get file size once and reuse to avoid redundant stat calls
+                try:
+                    file_size = os.path.getsize(filepath)
+                except OSError:
+                    continue
+
                 active_files.append({
                     'name': filename,
-                    'size': os.path.getsize(filepath),
-                    'formatted_size': format_size(os.path.getsize(filepath)),
+                    'size': file_size,
+                    'formatted_size': format_size(file_size),
                     'remaining_min': int(remaining // 60),
                     'remaining_sec': f"{int(remaining % 60):02d}",
                     'remaining_total': int(remaining)
