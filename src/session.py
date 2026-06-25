@@ -365,6 +365,9 @@ def clear_session_files(code_dir):
 def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True):
     """Update the cached total size for a session.
 
+    PERFORMANCE OPTIMIZED: Uses single atomic update instead of separate load+update.
+    This reduces file I/O from 2 reads + 2 writes to 1 read + 1 write per call.
+
     Args:
         code_dir: Session directory path
         delta_bytes: Size change in bytes (or absolute size if file_path provided)
@@ -372,32 +375,36 @@ def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True
         is_add: True if file was added, False if removed
 
     Returns:
-        Updated total size
+        Updated total size or None on error
     """
     try:
-        state = load_session_state(code_dir)
-        current_total = state.get('total_size', 0)
-
+        # Pre-calculate file size if needed
+        file_size = None
         if file_path and os.path.exists(file_path):
-            # Calculate delta from actual file
-            actual_size = os.path.getsize(file_path)
-            if is_add:
-                # Add file size to cache
-                new_total = current_total + actual_size
-            else:
-                # Remove file size from cache
-                new_total = max(0, current_total - actual_size)
-        else:
-            # Use explicit delta
-            if is_add:
-                new_total = current_total + delta_bytes
-            else:
-                new_total = max(0, current_total - delta_bytes)
+            file_size = os.path.getsize(file_path)
 
-        def update_cache(s):
-            s['total_size'] = new_total
+        result = [None]
+        def update_cache(state):
+            current_total = state.get('total_size', 0)
+
+            if file_size is not None:
+                # Use actual file size
+                if is_add:
+                    new_total = current_total + file_size
+                else:
+                    new_total = max(0, current_total - file_size)
+            else:
+                # Use explicit delta
+                if is_add:
+                    new_total = current_total + delta_bytes
+                else:
+                    new_total = max(0, current_total - delta_bytes)
+
+            state['total_size'] = new_total
+            result[0] = new_total
+
         update_session_state(code_dir, update_cache)
-        return new_total
+        return result[0]
     except Exception as e:
         print(f"Error updating size cache: {e}")
         return None
