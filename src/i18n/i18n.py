@@ -7,6 +7,7 @@ import json
 import os
 import ipaddress
 from bottle import request
+from src.utils import get_client_ip
 
 # Configuration
 DEFAULT_LANGUAGE = 'en'
@@ -268,17 +269,6 @@ def parse_accept_language(header: str) -> str:
     return DEFAULT_LANGUAGE
 
 
-def get_client_ip(request):
-    """Extract client IP from request, handling proxies."""
-    # Common headers used by reverse proxies
-    for header in ['X-Forwarded-For', 'X-Real-IP']:
-        ip = request.headers.get(header)
-        if ip:
-            # X-Forwarded-For can be a list: "client, proxy1, proxy2"
-            return ip.split(',')[0].strip()
-    return request.environ.get('REMOTE_ADDR')
-
-
 def load_ip_database():
     """Load IP range database into memory."""
     global _ip_intervals
@@ -326,7 +316,7 @@ def search_country(ip_str):
 
 def get_native_language_info(request):
     """Detect native language from IP and return its config."""
-    ip = get_client_ip(request)
+    ip = get_client_ip()
     country_code = search_country(ip)
     
     lang_code = COUNTRY_TO_LANG.get(country_code, DEFAULT_LANGUAGE)

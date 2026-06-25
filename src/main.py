@@ -395,10 +395,9 @@ def join_session(code):
         if had_host and not has_host:
             clear_session_files(code_dir)
 
-        ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
         if client_id not in state['clients']:
             trusted_ips = state.get('trusted_ips', {})
-            
+
             # New client logic
             # If no active host exists OR this IP was successfully approved before
             ip = get_client_ip()
@@ -505,7 +504,7 @@ def heartbeat(code):
                 state['clients'][client_id]['status'] = 'approved'
                 
                 # Record IP as trusted
-                ip = state['clients'][client_id].get('ip') or request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+                ip = state['clients'][client_id].get('ip') or get_client_ip()
                 if ip:
                     if not isinstance(state.get('trusted_ips'), dict):
                         state['trusted_ips'] = {}
