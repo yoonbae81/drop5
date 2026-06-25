@@ -17,6 +17,11 @@ PORT = int(os.getenv('PORT', 5555))
 # SECURITY: Default to false in production to prevent information disclosure
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 
+# PRIVACY: Enable IP masking in audit logs for GDPR compliance
+# When true, IP addresses are partially masked (e.g., "192.168.1.xxx")
+# Set to 'false' if you need full IP addresses for fail2ban or other security tools
+MASK_IP_IN_LOGS = os.getenv('MASK_IP_IN_LOGS', 'true').lower() == 'true'
+
 # Maximum files per session (country-based restrictions handled by CrowdSec)
 MAX_FILES = int(os.getenv('MAX_FILES', '30'))
 
