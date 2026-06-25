@@ -52,123 +52,163 @@ def get_session_size(code_dir, use_cache=True):
     return total_size
 
 def cleanup_session(code_dir):
-    """Cleanup expired files and remove empty session directories."""
+    """Cleanup expired files and remove empty session directories.
+
+    Performance optimized: Uses os.scandir() which caches stat information,
+    reducing syscalls from multiple per file to ~1 syscall total.
+    """
     if not os.path.exists(code_dir):
         return True
 
     now = time.time()
     files_active = False
+    real_files_count = 0
 
-    # 1. Cleanup expired files
-    for filepath in glob.glob(os.path.join(code_dir, '*')):
-        if filepath.endswith('.timestamp') or filepath.endswith('.session.json'):
-            continue
-        
-        if os.path.isfile(filepath):
-            try:
-                if now - os.path.getmtime(filepath) > FILE_TIMEOUT:
-                    os.remove(filepath)
-                else:
-                    files_active = True
-            except OSError:
-                pass # Ignore race conditions
-
-    # 2. Remove session if empty or only contains hidden files/metadata
     try:
-        all_entries = os.listdir(code_dir)
-        # Filter out hidden files like .csrf_token and our session file
-        real_files = [f for f in all_entries if not f.startswith('.') and f != '.session.json']
-        
-        if not real_files and not files_active:
-             # Only remove if directory has existed for at least 300 seconds (5 min)
-             if now - os.path.getmtime(code_dir) > 300:
-                 shutil.rmtree(code_dir)
-                 return True
-    except OSError:
-        pass
-            
-    return False
-
-def cleanup_all_sessions():
-    """Scan and cleanup all expired sessions in the files directory."""
-    if not os.path.exists(UPLOAD_DIR):
-        return
-    
-    now = time.time()
-    
-    # Iterate through all session directories
-    for code_dir in glob.glob(os.path.join(UPLOAD_DIR, '*')):
-        if not os.path.isdir(code_dir):
-            continue
-            
-        try:
-            # Check if directory itself is old enough to be cleaned
-            dir_mtime = os.path.getmtime(code_dir)
-            
-            # Clean expired files in this session
-            has_active_files = False
-            for filepath in glob.glob(os.path.join(code_dir, '*')):
-                if filepath.endswith('.timestamp') or filepath.endswith('.session.json'):
+        # Single scandir() call for both cleanup and empty check
+        with os.scandir(code_dir) as entries:
+            for entry in entries:
+                # Skip session state file
+                if entry.name == '.session.json':
                     continue
-                
-                if os.path.isfile(filepath):
+
+                # Skip hidden files (but still count them for directory removal logic)
+                if entry.name.startswith('.'):
+                    continue
+
+                real_files_count += 1
+
+                # Cleanup expired files
+                if entry.is_file():
                     try:
-                        if now - os.path.getmtime(filepath) > FILE_TIMEOUT:
-                            os.remove(filepath)
+                        stat = entry.stat()
+                        if now - stat.st_mtime > FILE_TIMEOUT:
+                            os.remove(entry.path)
+                            real_files_count -= 1
                         else:
-                            has_active_files = True
+                            files_active = True
                     except OSError:
-                        pass
-            
-            # Remove session directory if empty or no active files
-            remaining_files = [f for f in os.listdir(code_dir) if f != '.session.json'] if os.path.exists(code_dir) else []
-            if not remaining_files and not has_active_files:
-                # Only remove if directory is old enough
-                if now - dir_mtime > 300:
-                    try:
-                        shutil.rmtree(code_dir)
-                    except OSError:
-                        pass
+                        pass  # Ignore race conditions
+    except OSError:
+        return False
+
+    # Remove session if empty and no active files
+    if real_files_count == 0 and not files_active:
+        # Only remove if directory has existed for at least 300 seconds (5 min)
+        try:
+            if now - os.path.getmtime(code_dir) > 300:
+                shutil.rmtree(code_dir)
+                return True
         except OSError:
             pass
 
+    return False
+
+def cleanup_all_sessions():
+    """Scan and cleanup all expired sessions in the files directory.
+
+    Performance optimized: Uses os.scandir() for both directory iteration
+    and file iteration, reducing syscalls significantly.
+    """
+    if not os.path.exists(UPLOAD_DIR):
+        return
+
+    now = time.time()
+
+    # Iterate through all session directories using scandir
+    try:
+        with os.scandir(UPLOAD_DIR) as session_entries:
+            for session_entry in session_entries:
+                if not session_entry.is_dir():
+                    continue
+
+                code_dir = session_entry.path
+
+                try:
+                    # Get directory mtime from cached scandir stat
+                    dir_stat = session_entry.stat()
+                    dir_mtime = dir_stat.st_mtime
+
+                    # Clean expired files in this session
+                    has_active_files = False
+                    remaining_files_count = 0
+
+                    with os.scandir(code_dir) as file_entries:
+                        for file_entry in file_entries:
+                            # Skip session state file
+                            if file_entry.name == '.session.json':
+                                continue
+
+                            # Skip hidden files
+                            if file_entry.name.startswith('.'):
+                                continue
+
+                            remaining_files_count += 1
+
+                            if file_entry.is_file():
+                                try:
+                                    stat = file_entry.stat()
+                                    if now - stat.st_mtime > FILE_TIMEOUT:
+                                        os.remove(file_entry.path)
+                                        remaining_files_count -= 1
+                                    else:
+                                        has_active_files = True
+                                except OSError:
+                                    pass
+
+                    # Remove session directory if empty and no active files
+                    if remaining_files_count == 0 and not has_active_files:
+                        # Only remove if directory is old enough
+                        if now - dir_mtime > 300:
+                            try:
+                                shutil.rmtree(code_dir)
+                            except OSError:
+                                pass
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
 def get_active_files(code_dir):
-    """Helper to get list of active files in a directory."""
+    """Helper to get list of active files in a directory.
+
+    Performance optimized: Uses os.scandir() which caches stat information,
+    reducing syscalls from ~3 per file (listdir+isfile+getmtime+getsize)
+    to ~1 syscall per file (scandir internally does stat, cached in DirEntry).
+    """
     active_files = []
     now = time.time()
-    
+
     if os.path.exists(code_dir):
-        # Sort by mtime descending (newest first)
-        files_in_dir = os.listdir(code_dir)
         files_with_time = []
-        for filename in files_in_dir:
-            if filename == '.session.json':
-                continue
-            filepath = os.path.join(code_dir, filename)
-            if os.path.isfile(filepath):
-                try:
-                    files_with_time.append((filename, os.path.getmtime(filepath)))
-                except OSError:
-                    continue
-        
+        try:
+            # os.scandir() is more efficient than os.listdir() + os.stat()
+            # DirEntry objects cache stat results, avoiding redundant syscalls
+            with os.scandir(code_dir) as entries:
+                for entry in entries:
+                    if entry.name == '.session.json':
+                        continue
+                    if entry.is_file():
+                        try:
+                            # entry.stat() returns cached stat data from scandir
+                            stat = entry.stat()
+                            files_with_time.append((entry.name, stat.st_mtime, stat.st_size))
+                        except OSError:
+                            continue
+        except OSError:
+            return active_files
+
         # Sort: most recent first
         files_with_time.sort(key=lambda x: x[1], reverse=True)
-        
-        for filename, mtime in files_with_time:
-            filepath = os.path.join(code_dir, filename)
+
+        for filename, mtime, file_size in files_with_time:
             expiry_time = mtime + FILE_TIMEOUT
             remaining = expiry_time - now
 
             if remaining > 0:
-                # Get file size once and reuse to avoid redundant stat calls
-                try:
-                    file_size = os.path.getsize(filepath)
-                except OSError:
-                    continue
-
                 active_files.append({
                     'name': filename,
-                    'size': file_size,
+                    'size': file_size,  # Already obtained from scandir stat cache
                     'formatted_size': format_size(file_size),
                     'remaining_min': int(remaining // 60),
                     'remaining_sec': f"{int(remaining % 60):02d}",
