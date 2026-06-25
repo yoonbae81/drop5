@@ -874,7 +874,10 @@ def upload_text(code):
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
-            
+
+        # Update session size cache (performance optimization)
+        update_session_size_cache(code_dir, 0, file_path=filepath, is_add=True)
+
         # Log text upload
         file_hash = calculate_file_hash(filepath)
         ip = get_client_ip()
@@ -883,7 +886,7 @@ def upload_text(code):
             'size': actual_size,
             'hash': file_hash
         })
-        
+
         # Record hash for system-wide duplicate detection
         protection.record_access(action=f"hash:{file_hash}")
 
