@@ -768,7 +768,7 @@ async function saveText() {
     saveBtn.disabled = true;
 
     const currentPath = window.location.pathname.replace(/\/+$/, "");
-    const uploadUrl = `${currentPath}/text-upload`;
+    const uploadUrl = `${currentPath}/upload`;
 
     try {
         const response = await fetch(uploadUrl, {

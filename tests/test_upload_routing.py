@@ -11,6 +11,11 @@ import main
 
 
 class TestUploadRouting(unittest.TestCase):
+    def test_text_upload_has_no_dedicated_route(self):
+        routes = [route.rule for route in main.app.routes]
+
+        self.assertFalse(any(rule.endswith('/text-upload') for rule in routes))
+
     def test_content_form_field_wins_when_json_metadata_is_also_present(self):
         with tempfile.TemporaryDirectory() as upload_dir:
             upload = MagicMock()

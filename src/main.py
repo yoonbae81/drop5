@@ -781,8 +781,6 @@ def delete_all_files(code):
     response.set_header('Content-Type', 'application/json')
     return {'success': True}
 
-@app.post(f'{URL_PREFIX}/<code>/text-upload')
-@app.post('/<code>/text-upload')
 def upload_text(code):
     """Handle direct text input upload."""
     set_security_headers()
