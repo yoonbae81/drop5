@@ -601,7 +601,8 @@ def upload_file(code):
         response.status = 400
         return {'success': False, 'error': 'Invalid code'}
 
-    if request.json is not None:
+    uploads = request.files.getall('file')
+    if request.json is not None and not uploads:
         return upload_text(code)
     
     client_id = request.forms.get('clientId')
@@ -618,8 +619,6 @@ def upload_file(code):
         ip = get_client_ip()
         protection.record_access(action='CREATE_SESSION')
         log_action('CREATE_SESSION', code, client_id, ip)
-
-    uploads = request.files.getall('file')
 
     print(f"Uploading files for code: {code}")
 
