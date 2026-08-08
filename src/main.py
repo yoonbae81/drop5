@@ -601,11 +601,12 @@ def upload_file(code):
         response.status = 400
         return {'success': False, 'error': 'Invalid code'}
 
-    uploads = request.files.getall('file')
+    uploads = request.files.getall('content')
     if request.json is not None and not uploads:
         return upload_text(code)
     
     client_id = request.forms.get('clientId')
+    filename_override = request.forms.get('name')
 
     if client_id and not validate_client_id(client_id):
         response.status = 400
@@ -635,19 +636,20 @@ def upload_file(code):
     
     try:
         for upload in uploads:
-            if not upload.raw_filename:
+            raw_filename = filename_override or upload.raw_filename
+            if not raw_filename:
                 continue
             
             # Check if file extension is blocked
-            is_blocked, blocked_ext = is_file_extension_blocked(upload.raw_filename)
+            is_blocked, blocked_ext = is_file_extension_blocked(raw_filename)
             if is_blocked:
-                blocked_files.append(f"{upload.raw_filename} (.{blocked_ext})")
+                blocked_files.append(f"{raw_filename} (.{blocked_ext})")
                 continue
                 
-            normalized_filename = normalize_filename(upload.raw_filename)
+            normalized_filename = normalize_filename(raw_filename)
             # Skip files with invalid/sanitized filenames (path traversal attempts)
             if not normalized_filename:
-                print(f"Invalid filename skipped: {upload.raw_filename}")
+                print(f"Invalid filename skipped: {raw_filename}")
                 continue
             
             filepath = os.path.join(code_dir, normalized_filename)
@@ -658,7 +660,7 @@ def upload_file(code):
             upload.file.seek(0)
             
             if actual_size > MAX_FILE_SIZE:
-                 too_large_files.append(f"{upload.raw_filename} ({actual_size // (1024*1024)}MB)")
+                 too_large_files.append(f"{raw_filename} ({actual_size // (1024*1024)}MB)")
                  continue
 
             # Check total session size
@@ -796,10 +798,10 @@ def upload_text(code):
         log_action('CREATE_SESSION', code, client_id, ip)
 
     try:
-        if 'text' not in data:
+        if 'content' not in data:
             return {'success': False, 'error': translations.get('enter_content', 'No content provided')}
         
-        content = data.get('text', '')
+        content = data.get('content', '')
         if not content.strip():
             return {'success': False, 'error': translations.get('enter_content', 'No recognizable text')}
             

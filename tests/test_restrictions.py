@@ -40,7 +40,7 @@ class TestUploadLimits(unittest.TestCase):
     def test_text_upload_limit_is_shared_across_regions(
         self, mock_request, _mock_sanitize, _mock_get_files
     ):
-        mock_request.json = {'text': 'some text'}
+        mock_request.json = {'content': 'some text'}
 
         with (
             patch('main.MAX_FILES', 30),

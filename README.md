@@ -37,19 +37,19 @@ iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 �
 7. **유형 가져오기(Get Type)** 액션을 추가합니다.
    - 입력(Input): `Shortcut Input`
 8. **조건문(If)** 액션을 추가합니다.
-   - 조건: `Get Type`의 결과가 `File`이면
-   - 파일인 경우 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
+   - 조건: `Get Type`의 결과가 `Text`이면
+   - 텍스트인 경우 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
+     - 요청 본문(Request Body): `JSON`
+     - 필드 이름(Key): `content`
+     - 필드 값(Value): 단축어 입력 텍스트
+   - **Otherwise** 분기에는 파일용 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
      - URL(URL): `URL` 변수
      - 방법(Method): `POST`
      - 요청 본문(Request Body): `Form`
-     - 필드 이름(Key): `file`
+     - 필드 이름(Key): `content`
      - 필드 값(Value): 단축어 입력 파일
-   - **Otherwise** 분기에는 텍스트용 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
-     - URL(URL): `URL` 변수
-     - 방법(Method): `POST`
-     - 요청 본문(Request Body): `JSON`
-     - 필드 이름(Key): `text`
-     - 필드 값(Value): 단축어 입력 텍스트
+     - 파일명 필드 이름(Key): `name`
+     - 파일명 필드 값(Value): `Get Details of Files`의 `Name`
 9. 필요하면 **알림 표시(Show Notification)** 또는 **결과 보기(Show Result)** 액션을 `End If` 다음에 추가합니다.
 
 세션 코드는 실행할 때마다 묻지 않습니다. 다른 세션을 사용하려면 3번의 Text 액션 값을 수정합니다.

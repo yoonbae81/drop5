@@ -607,7 +607,7 @@ async function uploadFiles(files) {
     for (let i = 0; i < totalFiles; i++) {
         let fileName = files[i].name;
         if (fileName.normalize) fileName = fileName.normalize('NFC');
-        formData.append('file', files[i], fileName);
+        formData.append('content', files[i], fileName);
     }
     formData.append('clientId', CLIENT_ID);
 
@@ -776,7 +776,7 @@ async function saveText() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ text: text, clientId: CLIENT_ID }) // Add security token
+            body: JSON.stringify({ content: text, clientId: CLIENT_ID }) // Add security token
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
