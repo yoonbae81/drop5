@@ -324,7 +324,7 @@ def main_page(code):
         
         os.makedirs(code_dir, exist_ok=True)
 
-    active_files = get_active_files(code_dir)
+    active_files = []
     
     # Detect user's language
     user_lang = detect_language(request)
@@ -601,27 +601,22 @@ def upload_file(code):
         response.status = 400
         return {'success': False, 'error': 'Invalid code'}
     
-    # Check Client Approval
     client_id = request.forms.get('clientId')
-    
-    # SECURITY: Validate client ID format
-    if not validate_client_id(client_id):
+
+    if client_id and not validate_client_id(client_id):
         response.status = 400
         return {'success': False, 'error': 'Invalid client ID format'}
     
     code_dir = os.path.join(UPLOAD_DIR, code)
-    # Check Client Approval
-    if not check_approval_or_auto_approve(code, client_id, code_dir):
-        response.status = 403
-        return {'success': False, 'error': translations.get('device_approval_required', 'Unauthorized: Device not approved')}
 
-    uploads = request.files.getall('file')
-    
-    if not os.path.exists(code_dir):
-        # Record and log session creation
+    session_exists = os.path.exists(code_dir)
+    os.makedirs(code_dir, exist_ok=True)
+    if not session_exists:
+        ip = get_client_ip()
         protection.record_access(action='CREATE_SESSION')
         log_action('CREATE_SESSION', code, client_id, ip)
-        os.makedirs(code_dir, exist_ok=True)
+
+    uploads = request.files.getall('file')
 
     print(f"Uploading files for code: {code}")
 
