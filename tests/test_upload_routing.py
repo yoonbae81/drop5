@@ -11,6 +11,30 @@ import main
 
 
 class TestUploadRouting(unittest.TestCase):
+    def test_delete_all_preserves_session_state(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            code_dir = os.path.join(upload_dir, 'session')
+            os.makedirs(code_dir)
+            state_path = os.path.join(code_dir, '.session.json')
+            with open(state_path, 'w', encoding='utf-8') as state_file:
+                state_file.write('{}')
+
+            request = MagicMock()
+            request.forms.get.side_effect = lambda key: 'client-123456' if key == 'clientId' else None
+            request.json = None
+
+            with (
+                patch.object(main, 'UPLOAD_DIR', upload_dir),
+                patch.object(main, 'request', request),
+                patch.object(main, 'check_approval_or_auto_approve', return_value=True),
+                patch.object(main, 'log_action'),
+                patch.object(main, 'update_session_size_cache'),
+            ):
+                result = main.delete_all_files('session')
+
+            self.assertEqual(result, {'success': True})
+            self.assertTrue(os.path.exists(state_path))
+
     def test_text_upload_has_no_dedicated_route(self):
         routes = [route.rule for route in main.app.routes]
 

@@ -712,7 +712,7 @@ def upload_file(code):
         import traceback
         traceback.print_exc()
         response.status = 500
-        return {'success': False, 'error': str(e)}
+        return {'success': False, 'error': 'Upload failed'}
 
     response.set_header('Content-Type', 'application/json')
     
@@ -760,7 +760,7 @@ def delete_all_files(code):
     deleted_count = 0
     if os.path.exists(code_dir):
         files_to_delete = [f for f in os.listdir(code_dir)
-                          if os.path.isfile(os.path.join(code_dir, f))]
+                          if f != '.session.json' and os.path.isfile(os.path.join(code_dir, f))]
         deleted_count = len(files_to_delete)
 
         for filename in files_to_delete:
@@ -904,7 +904,7 @@ def upload_text(code):
     except Exception as e:
         print(f"ERROR: Text upload failed: {str(e)}")
         response.status = 500
-        return {'success': False, 'error': str(e)}
+        return {'success': False, 'error': 'Text upload failed'}
 
 @app.get(f'{URL_PREFIX}/<code>/download/<filename>')
 @app.get('/<code>/download/<filename>')
