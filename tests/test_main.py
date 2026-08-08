@@ -3,6 +3,7 @@ import sys
 import os
 import shutil
 import time
+from unittest.mock import patch
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -89,6 +90,7 @@ class TestMain(unittest.TestCase):
         code = "atomic1"
         code_dir = os.path.join(self.test_upload_dir, code)
         client_id = "test_client_1"
+        os.makedirs(code_dir)
         
         # 1. First user should be auto-approved (IP: 1.1.1.1)
         from bottle import request
@@ -110,6 +112,31 @@ class TestMain(unittest.TestCase):
         
         state = load_session_state(code_dir)
         self.assertNotIn(client_id_2, state['clients'])
+
+    def test_approved_client_auth_check_avoids_state_write(self):
+        code = "cached1"
+        code_dir = os.path.join(self.test_upload_dir, code)
+        os.makedirs(code_dir)
+        state = {
+            'clients': {
+                'test_client_1': {
+                    'status': 'approved',
+                    'last_seen': time.time(),
+                }
+            },
+            'trusted_ips': {},
+        }
+        from src.session import save_session_state
+        save_session_state(code_dir, state)
+
+        with patch.object(main, 'update_session_state') as update:
+            self.assertTrue(
+                main.check_approval_or_auto_approve(
+                    code, 'test_client_1', code_dir
+                )
+            )
+
+        update.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

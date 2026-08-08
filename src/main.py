@@ -132,6 +132,21 @@ def check_approval_or_auto_approve(code, client_id, code_dir):
     
     Wrapper around auto_approve_if_solo using update_session_state for atomicity.
     """
+    if not os.path.isdir(code_dir):
+        return False
+
+    if not validate_client_id(client_id):
+        return False
+
+    state = load_session_state(code_dir)
+    client = state.get('clients', {}).get(client_id)
+    if (
+        isinstance(client, dict)
+        and client.get('status') == 'approved'
+        and time.time() - client.get('last_seen', 0) < 300
+    ):
+        return True
+
     approval_res = [False]
     def callback(state):
         approval_res[0] = auto_approve_if_solo(client_id, state)
@@ -671,12 +686,15 @@ def upload_file(code):
                 error_msg = error_msg.replace('{{max_mb}}', str(MAX_STORAGE_SIZE // (1024*1024)))
                 return {'success': False, 'error': error_msg}
 
+            previous_size = os.path.getsize(filepath) if os.path.isfile(filepath) else 0
             upload.save(filepath, overwrite=True)
             uploaded_count += 1
             print(f"Saved file: {normalized_filename}")
 
             # Update session size cache (performance optimization)
-            update_session_size_cache(code_dir, 0, file_path=filepath, is_add=True)
+            update_session_size_cache(
+                code_dir, actual_size - previous_size, is_add=True
+            )
 
             # Log upload action
             file_hash = calculate_file_hash(filepath)
@@ -862,11 +880,14 @@ def upload_text(code):
              error_msg = error_msg.replace('{{max_mb}}', str(MAX_STORAGE_SIZE // (1024*1024)))
              return {'success': False, 'error': error_msg}
 
+        previous_size = os.path.getsize(filepath) if os.path.isfile(filepath) else 0
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
         # Update session size cache (performance optimization)
-        update_session_size_cache(code_dir, 0, file_path=filepath, is_add=True)
+        update_session_size_cache(
+            code_dir, actual_size - previous_size, is_add=True
+        )
 
         # Log text upload
         file_hash = calculate_file_hash(filepath)

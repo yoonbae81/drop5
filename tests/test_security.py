@@ -33,6 +33,7 @@ except ImportError:
 # Import the application
 try:
     from main import app
+    import main
     from utils import sanitize_session_code, normalize_filename, decode_filename
 except ImportError:
     # For testing without full app import
@@ -356,6 +357,19 @@ class TestSecurityHeaders(unittest.TestCase):
         
         # Check that routes set cache headers
         self.assertIsNotNone(app)
+
+
+class TestUnknownSessionAccess(unittest.TestCase):
+    def test_auth_check_does_not_create_missing_session(self):
+        with tempfile.TemporaryDirectory() as upload_dir:
+            code_dir = os.path.join(upload_dir, 'missing123')
+            with patch.object(main, 'UPLOAD_DIR', upload_dir):
+                approved = main.check_approval_or_auto_approve(
+                    'missing123', 'client_123', code_dir
+                )
+
+            self.assertFalse(approved)
+            self.assertFalse(os.path.exists(code_dir))
 
 
 if __name__ == '__main__':

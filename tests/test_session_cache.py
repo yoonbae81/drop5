@@ -91,6 +91,18 @@ class TestSessionSizeCache(unittest.TestCase):
         size = get_session_size(self.code_dir, use_cache=True)
         self.assertEqual(size, 500)
 
+    def test_cache_tracks_overwrite_delta(self):
+        test_file = os.path.join(self.code_dir, 'test.txt')
+        with open(test_file, 'wb') as file_handle:
+            file_handle.write(b'x' * 1000)
+        update_session_size_cache(self.code_dir, 1000)
+
+        with open(test_file, 'wb') as file_handle:
+            file_handle.write(b'x' * 250)
+        update_session_size_cache(self.code_dir, -750)
+
+        self.assertEqual(get_session_size(self.code_dir, use_cache=True), 250)
+
 
 if __name__ == '__main__':
     unittest.main()
