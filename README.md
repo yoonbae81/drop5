@@ -1,6 +1,6 @@
 # Drop5 — Ephemeral File Sharing Service
 
-**Drop5**는 **OS가 서로 다른 개인 기기 간**의 번거로운 파일 전송 문제를 **로그인 없이** 5자리 코드로 즉시 해결해 주는 일회성 공유 서비스입니다. 특히 공용 PC에서도 계정 유출 걱정 없이 안전하게 사용할 수 있으며, 모든 파일은 5분 후 영구적으로 자동 삭제됩니다.
+**Drop5**는 **OS가 서로 다른 개인 기기 간**의 번거로운 파일 전송 문제를 **로그인 없이** 세션 코드로 즉시 해결해 주는 일회성 공유 서비스입니다. 특히 공용 PC에서도 계정 유출 걱정 없이 사용할 수 있으며, 모든 파일은 5분 후 영구적으로 자동 삭제됩니다.
 
 🌐 **공식 웹사이트**: [Drop5.net](https://drop5.net)
 
@@ -9,8 +9,8 @@
 ## 📖 사용 방법
 
 1. **파일공유 세션 시작**
-   - 브라우저에서 서버 주소(예: `https://drop5.net`)로 접속하면 고유한 5자리 세션 코드가 포함된 페이지로 자동 이동합니다.
-   - **맞춤형 세션 코드 (보안 강화)**: 보안을 위해 더 길고 복잡한 코드를 사용하고 싶다면, 주소창에 직접 원하는 문자열을 입력하여 접속할 수 있습니다 (예: `/My-Secure-Vault-123456789`).
+   - 브라우저에서 서버 주소(예: `https://drop5.net`)로 접속하면 세션 코드가 포함된 페이지로 자동 이동합니다.
+   - 세션 코드를 아는 사람이 세션에 접근할 수 있으므로 운영 환경에서는 짧은 코드보다 충분히 긴 랜덤 코드를 사용합니다 (예: `/My-Secure-Vault-123456789`).
 2. **파일 업로드**
    - 화면 좌측의 **구름 아이콘(☁️)** 영역으로 파일을 드래그 앤 드롭하거나 영역을 클릭하여 선택합니다.
    - **텍스트 공유**: 우측 하단의 **메모 아이콘(📝)**을 사용하여 텍스트 내용을 즉시 파일로 공유할 수 있습니다.
@@ -19,6 +19,48 @@
    - 새로운 기기가 접속할 경우, 기존에 접속한 기기(호스트)의 **승인**이 있어야만 접근이 가능합니다.
 4. **관리 및 삭제**
    - 각 파일은 5분 후 자동 삭제되며, 더 이상 공유할 필요가 없다면 **쓰레기통 아이콘**으로 즉시 삭제도 가능합니다.
+
+### iOS Shortcut으로 파일 업로드
+
+iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 수 있습니다. 별도 업로드 토큰이나 `clientId`는 사용하지 않습니다.
+
+1. **단축어 앱(Shortcuts app)**에서 새 단축어(New Shortcut)를 만듭니다.
+2. 단축어 세부사항(Shortcut Details)에서 **공유 시트에서 보기(Show in Share Sheet)**를 켜고 입력 유형을 **파일(Files)**과 **텍스트(Text)**로 설정합니다.
+3. **텍스트(Text)** 액션을 추가하고 사용할 세션 코드를 한 번 입력합니다.
+   - 예: `My-Secure-Vault-123456789`
+4. **변수 설정(Set Variable)** 액션을 추가하고 변수 이름을 `Session Code`로 지정합니다.
+5. **텍스트(Text)** 액션을 추가하고 다음 순서로 URL을 조합합니다.
+   - `https://drop5.net/`
+   - `Session Code` 변수
+   - `/upload`
+6. **변수 설정(Set Variable)** 액션을 추가하고 변수 이름을 `URL`로 지정합니다.
+7. **유형 가져오기(Get Type)** 액션을 추가합니다.
+   - 입력(Input): `Shortcut Input`
+8. **조건문(If)** 액션을 추가합니다.
+   - 조건: `Get Type`의 결과가 `File`이면
+   - 파일인 경우 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
+     - URL(URL): `URL` 변수
+     - 방법(Method): `POST`
+     - 요청 본문(Request Body): `Form`
+     - 필드 이름(Key): `file`
+     - 필드 값(Value): 단축어 입력 파일
+   - **Otherwise** 분기에는 텍스트용 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
+     - URL(URL): `URL` 변수
+     - 방법(Method): `POST`
+     - 요청 본문(Request Body): `JSON`
+     - 필드 이름(Key): `text`
+     - 필드 값(Value): 단축어 입력 텍스트
+9. 필요하면 **알림 표시(Show Notification)** 또는 **결과 보기(Show Result)** 액션을 `End If` 다음에 추가합니다.
+
+세션 코드는 실행할 때마다 묻지 않습니다. 다른 세션을 사용하려면 3번의 Text 액션 값을 수정합니다.
+
+최종 요청 URL의 형식은 다음과 같습니다.
+
+```text
+POST https://drop5.net/<session-code>/upload
+```
+
+`/upload/<session-code>`가 아니라 기존 Drop5 경로 구조인 `/<session-code>/upload`를 사용합니다. 서버는 요청 본문이 Form이면 파일로, JSON이면 텍스트로 판단합니다. 세션 코드가 새 코드여도 세션을 만들며, 호스트 승인을 기다리지 않고 파일을 저장합니다.
 
 ---
 
@@ -40,16 +82,25 @@
 
 ### 🔐 접속 및 인프라 보안
 - **2단계 접속 승인**: 새로운 기기 접속 시 기존 사용자의 승인을 거치는 호스트 승인 시스템이 적용되어 있습니다.
-- **Brute Force 방지**: 1분 내 10회 이상 잘못된 코드로 접근 시 해당 IP를 1시간 동안 차단합니다.
+- **외부 보안 위임**: 브루트포스, DoS/DDoS, IP 차단, User-Agent 차단은 애플리케이션 내부 플러그인이 아니라 운영 인프라의 CrowdSec에서 처리합니다.
 - **보안 헤더**: XSS, Clickjacking, MIME 스니핑 방지를 위한 표준 보안 헤더가 적용되어 있습니다.
+- **초기 파일 목록 보호**: 승인 전 세션 HTML에는 파일 목록과 다운로드 링크를 렌더링하지 않습니다.
 
 ### 🛡️ 콘텐츠 보호 및 감사 정책
 - **파일 확장자 차단**: 실행 파일(.exe, .sh 등) 및 잠재적 위협이 되는 확장자는 엄격히 제한합니다.
 - **감사 로그(Audit Logging)**: 서비스의 안정성 확보 및 불법 행위 대응을 위한 최소한의 데이터 수집 원칙에 따라 기록됩니다.
     - **활동 유형**: 업로드, 다운로드, 세션 참여, 전체 삭제
     - **기록 항목**: 타임스탬프, 접속 IP, 세션 코드, 클라이언트 ID
-    - **파기 정책**: 개인정보 보호를 위해 90일 보관 후 영구 삭제
-- **지역별 이용 제한(Restricted Mode)**: 보안 리스크가 높은 지역에서 접속 시 세션당 업로드 파일 개수를 제한할 수 있습니다.
+    - **IP 보호**: `MASK_IP_IN_LOGS=true`이면 감사 로그의 IP를 마스킹합니다.
+- **세션 코드 보안**: 별도 토큰 없이 세션 코드가 접근 권한을 겸하므로, 코드를 충분히 길고 예측 불가능하게 유지해야 합니다.
+
+### 현재 업로드 및 승인 경계
+
+- `GET /<session-code>`: 세션 페이지에 접근합니다. 세션은 ad-hoc으로 생성되고 TTL에 따라 정리됩니다.
+- `POST /<session-code>/join`, `POST /<session-code>/heartbeat`: 기기 참여 및 승인 상태를 관리합니다.
+- `GET /<session-code>/files`, `GET /<session-code>/download/<filename>`: 기존 승인 흐름을 거친 뒤 파일을 조회합니다.
+- `POST /<session-code>/upload`: 호스트 승인 없이 파일을 업로드합니다. 세션 코드가 없으면 이 요청으로 세션이 생성됩니다.
+- 업로드도 파일명 정규화, 위험 확장자 차단, 파일별 크기 제한, 세션별 저장 용량 및 파일 개수 제한을 적용합니다.
 
 ---
 
@@ -71,30 +122,7 @@ cp .env.example .env    # 환경 설정 파일 생성 (필요시 수정)
 ./scripts/install-systemd.sh
 ```
 
-### 3. fail2ban 연동 (보안 강화)
-운영 환경(Linux)에서는 `fail2ban`을 연동하여 시스템 레벨에서 무단 접근을 강력하게 차단할 수 있습니다. `drop5`는 보안 이벤트를 감지하면 `audit/audit.log`에 `status: BLOCK_IP` 태그가 포함된 로그를 남깁니다.
-
-**1단계: 필터 설정 (`/etc/fail2ban/filter.d/drop5.conf`)**
-```ini
-[Definition]
-# JSON에서 ip와 verdict: BLOCK_IP를 탐지합니다.
-failregex = ^.*"ip": "<HOST>",.*"verdict": "BLOCK_IP".*$
-ignoreregex =
-```
-
-**2단계: 감옥 설정 (`/etc/fail2ban/jail.d/drop5.conf`)**
-```ini
-[drop5]
-enabled = true
-port    = http,https
-filter  = drop5
-logpath = /path/to/drop5/audit/audit.log
-maxretry = 1
-bantime  = 2592000
-findtime = 600
-```
-
-### 4. 테스트 실행
+### 3. 테스트 실행
 의존성이 설치된 상태에서 다음 명령어로 전체 테스트를 수행할 수 있습니다.
 ```bash
 ./.venv/bin/python3 -m unittest discover tests -v
@@ -110,38 +138,31 @@ drop5/
 │   ├── main.py          # 메인 API 및 라우팅 로직
 │   ├── session.py       # 세션 상태 및 파일 생명주기(TTL) 관리
 │   ├── config.py        # 환경 변수 및 전역 설정
-│   ├── middleware.py    # 보안 미들웨어 컨테이너 (플러그인 실행기)
-│   ├── security/        # 보안 플러그인 모듈
-│   │   ├── base.py                 # 플러그인 인터페이스
-│   │   ├── brute_force_protection.py # 무차별 대입 방어
-│   │   ├── ua_blocker.py           # 악성 User-Agent 차단
-│   │   └── dos_protection.py       # (비공개) DoS 방어 로직
+│   ├── middleware.py    # 외부 보안 시스템 연동 미들웨어
+│   ├── security/        # 외부 보안 연동을 위한 최소 인터페이스
+│   │   └── base.py
 │   ├── utils.py         # 파일 처리 및 한글 정규화 유틸리티
-│   ├── audit.py         # 감사 및 보안 로그 처리 (fail2ban 연동)
+│   ├── audit.py         # 감사 및 보안 로그 처리
 │   ├── i18n/            # 다국어 지원 모듈 및 로케일 파일
 │   └── views/           # 프론트엔드 (HTML/JS/CSS)
 ├── scripts/             # 배포 및 관리 스크립트
 ├── tests/               # 단위 테스트 코드
 ├── files/               # 임시 파일 저장소 (자동 관리)
-├── security/            # 보안 설정 파일 (예: blocked_uas.txt)
-└── audit/               # fail2ban이 모니터링할 로그 디렉토리
+├── security/            # 외부 보안 시스템 설정 파일
+└── audit/               # 감사 로그 디렉토리
 ```
 
 ---
 
-## 🔐 보안 아키텍처 (Hybrid Protection)
+## 🔐 보안 아키텍처
 
-Drop5는 **어플리케이션 계층(L7)**의 정밀한 탐지와 **커널 계층(L3/L4)**의 효율적인 차단을 결합한 하이브리드 보호 모델을 사용합니다.
+Drop5 애플리케이션은 파일 처리와 세션 승인에 집중하고, 대규모 요청 탐지와 IP 차단은 운영 인프라에 위임합니다.
 
-1.  **탐지 (Plugin Security)**: 보안 로직이 모듈화된 **플러그인 아키텍처**를 사용합니다. 각 플러그인은 독립적으로 요청을 분석합니다.
-    - `UABlockerPlugin`: 블랙리스트에 등재된 악성 봇 차단
-    - `BruteForcePlugin`: 세션 코드 무차별 대입 시도 감지
-    - `DosProtectionPlugin`: (비공개) 정밀한 행동 분석을 통한 DoS 공격 방어
-2.  **기록 (Audit Logger)**: 위반 사례가 확인되면 `audit.log`에 `verdict: BLOCK_IP` 태그와 함께 IP 정보를 즉시 기록합니다.
-3.  **차단 (fail2ban/OS)**: 리눅스 환경의 `fail2ban`이 로그를 감시하다가 위반 IP를 발견하는 즉시 `iptables` 또는 `nftables`를 통해 시스템 전체에서 차단합니다.
-4.  **로컬 캐시**: 미들웨어 레벨에서도 짧은 시간 동안 IP를 메모리에 캐싱하여, OS 차단이 적용되기 전까지의 간극(Gap)을 즉시 방어합니다.
+1. **애플리케이션**: 보안 헤더, 세션 코드 경로 검증, 파일명 정규화, 위험 확장자 차단, 파일·세션 용량 제한, 세션 승인, 감사 로그를 처리합니다.
+2. **CrowdSec**: 브루트포스, DoS/DDoS, IP 차단, User-Agent 차단을 처리합니다. 애플리케이션의 `SecurityMiddleware`는 이 연동 지점과 감사 로깅 호환성을 유지합니다.
+3. **감사 로그**: 업로드, 다운로드, 세션 생성 및 승인 관련 이벤트를 기록합니다. IP 마스킹은 `MASK_IP_IN_LOGS`로 제어합니다.
 
-*개발 환경(`DEBUG=true`)에서는 위 기능들이 자동으로 비활성화되어 개발 편의성을 보장합니다.*
+CrowdSec이 설치되지 않은 환경에서는 해당 외부 보호 기능이 제공되지 않습니다. `DEBUG=true`에서는 애플리케이션 보안 미들웨어의 즉시 차단 검사가 비활성화됩니다.
 
 ---
 
@@ -157,12 +178,11 @@ Drop5는 **어플리케이션 계층(L7)**의 정밀한 탐지와 **커널 계�
 | `FILE_TIMEOUT`             | 파일 및 세션 유지 시간 (초)                  | `300` (5분)         |
 | `MAX_FILE_SIZE`            | 개별 파일 최대 크기 (Bytes)                  | `31457280` (30MB)   |
 | `MAX_STORAGE_SIZE`         | 세션당 전시 전체 파일 용량 합계 제한         | `104857600` (100MB) |
-| `MAX_FILES_NORMAL`         | 일반 지역 세션당 최대 파일 개수              | `30`                |
-| `MAX_FILES_RESTRICTED`     | 제한 지역 세션당 최대 파일 개수              | `5`                 |
-| **저장 경로 및 지역 정책** |                                              |                     |
+| `MAX_FILES`                | 세션당 최대 파일 개수                        | `30`                |
+| **저장 경로**              |                                              |                     |
 | `UPLOAD_DIR`               | 업로드 파일 저장 디렉토리                    | `files`             |
 | `AUDIT_DIR`                | 감사 로그 저장 디렉토리                      | `audit`             |
-| `RESTRICTED_COUNTRIES`     | 제한 모드를 적용할 지역 코드 목록            | `-`                 |
+| `MASK_IP_IN_LOGS`          | 감사 로그 IP 마스킹                           | `true`              |
 | **외부 연동 (옵션)**       |                                              |                     |
 | `REPORTER_DISCORD_WEBHOOK` | Discord 오류 리포팅 웹후크 URL               | `-`                 |
 | `UMAMI_ID`                 | Umami Analytics 추적 ID                      | `-`                 |

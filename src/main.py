@@ -600,6 +600,9 @@ def upload_file(code):
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
         response.status = 400
         return {'success': False, 'error': 'Invalid code'}
+
+    if request.json is not None:
+        return upload_text(code)
     
     client_id = request.forms.get('clientId')
 
@@ -778,19 +781,20 @@ def upload_text(code):
     if not data:
         return {'success': False, 'error': 'No data'}
     
-    # Check Client Approval
     client_id = data.get('clientId')
-    
-    # SECURITY: Validate client ID format
-    if not validate_client_id(client_id):
+
+    if client_id and not validate_client_id(client_id):
         response.status = 400
         return {'success': False, 'error': 'Invalid client ID format'}
         
     code_dir = os.path.join(UPLOAD_DIR, code)
-    # Check Client Approval
-    if not check_approval_or_auto_approve(code, client_id, code_dir):
-        response.status = 403
-        return {'success': False, 'error': translations.get('device_approval_required', 'Unauthorized')}
+
+    session_exists = os.path.exists(code_dir)
+    os.makedirs(code_dir, exist_ok=True)
+    if not session_exists:
+        ip = get_client_ip()
+        protection.record_access(action='CREATE_SESSION')
+        log_action('CREATE_SESSION', code, client_id, ip)
 
     try:
         if 'text' not in data:
@@ -815,12 +819,6 @@ def upload_text(code):
         # Sanitize base name to remove problematic characters for filenames
         filename_base = re.sub(r'[\\/*?:"<>|]', '_', filename_base)
         
-        if not os.path.exists(code_dir):
-            # Record and log session creation
-            protection.record_access(action='CREATE_SESSION')
-            log_action('CREATE_SESSION', code, client_id, ip)
-            os.makedirs(code_dir, exist_ok=True)
-            
         target_filename = f"{filename_base}.txt"
         normalized_filename = normalize_filename(target_filename)
         filepath = os.path.join(code_dir, normalized_filename)
