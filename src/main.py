@@ -620,6 +620,10 @@ def upload_file(code):
     if request.json is not None and not uploads:
         return upload_text(code)
     
+    # SECURITY CONTRACT: Upload intentionally bypasses device approval. The iOS
+    # Shortcut uses the session code directly and must work before a device has
+    # joined or been approved. Keep the session-code/path validation and all
+    # file type, size, count, and storage limits in place when hardening this route.
     client_id = request.forms.get('clientId')
     filename_override = request.forms.get('name')
 
