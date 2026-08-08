@@ -10,7 +10,7 @@
 
 1. **파일공유 세션 시작**
    - 브라우저에서 서버 주소(예: `https://drop5.net`)로 접속하면 세션 코드가 포함된 페이지로 자동 이동합니다.
-   - 세션 코드를 아는 사람이 세션에 접근할 수 있으므로 운영 환경에서는 짧은 코드보다 충분히 긴 랜덤 코드를 사용합니다 (예: `/My-Secure-Vault-123456789`).
+   - 세션 코드를 아는 사람이 세션에 접근할 수 있으므로 운영 환경에서는 짧은 코드보다 충분히 긴 랜덤 코드를 사용합니다.
 2. **파일 업로드**
    - 화면 좌측의 **구름 아이콘(☁️)** 영역으로 파일을 드래그 앤 드롭하거나 영역을 클릭하여 선택합니다.
    - **텍스트 공유**: 우측 하단의 **메모 아이콘(📝)**을 사용하여 텍스트 내용을 즉시 파일로 공유할 수 있습니다.
@@ -22,37 +22,38 @@
 
 ### iOS Shortcut으로 파일 업로드
 
-iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 수 있습니다. 별도 업로드 토큰이나 `clientId`는 사용하지 않습니다.
+iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 수 있습니다. 세션코드는 Shortcut에 포함하지 않고, 설치하는 사람이 직접 입력하도록 구성합니다.
 
 1. **단축어 앱(Shortcuts app)**에서 새 단축어(New Shortcut)를 만듭니다.
 2. 단축어 세부사항(Shortcut Details)에서 **공유 시트에서 보기(Show in Share Sheet)**를 켜고 입력 유형을 **파일(Files)**과 **텍스트(Text)**로 설정합니다.
-3. **텍스트(Text)** 액션을 추가하고 사용할 세션 코드를 한 번 입력합니다.
-   - 예: `My-Secure-Vault-123456789`
-4. **변수 설정(Set Variable)** 액션을 추가하고 변수 이름을 `Session Code`로 지정합니다.
-5. **텍스트(Text)** 액션을 추가하고 다음 순서로 URL을 조합합니다.
+3. **텍스트(Text)** 액션을 추가하고 임시 값을 입력한 뒤, 단축어 세부사항의 **Setup → Import Questions**에서 이 Text 액션을 선택합니다.
+   - 질문: `Drop5 세션코드를 입력하세요`
+   - `Default Answer`는 비워 둡니다.
+   - Import Question이 설정된 값은 Shortcut 공유 시 제거되고, 설치하는 사람이 자신의 세션코드를 입력합니다.
+4. **변수 설정(Set Variable)** 액션을 추가하고 Text 액션의 결과를 `Session Code`로 지정합니다.
+5. **텍스트(Text)** 액션으로 다음 URL을 조합하고 `URL` 변수로 지정합니다.
    - `https://drop5.net/`
    - `Session Code` 변수
    - `/upload`
-6. **변수 설정(Set Variable)** 액션을 추가하고 변수 이름을 `URL`로 지정합니다.
-7. **유형 가져오기(Get Type)** 액션을 추가합니다.
+6. **유형 가져오기(Get Type)** 액션을 추가합니다.
    - 입력(Input): `Shortcut Input`
-8. **조건문(If)** 액션을 추가합니다.
-   - 조건: `Get Type`의 결과가 `Text`이면
-   - 텍스트인 경우 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
+7. **조건문(If)**에서 `Get Type`의 결과가 `Text`인지 확인합니다.
+   - 텍스트인 경우 **URL의 콘텐츠 가져오기(Get Contents of URL)**:
+     - URL: `URL` 변수
+     - 방법(Method): `POST`
      - 요청 본문(Request Body): `JSON`
      - 필드 이름(Key): `content`
-     - 필드 값(Value): 단축어 입력 텍스트
-   - **Otherwise** 분기에는 파일용 **URL의 콘텐츠 가져오기(Get Contents of URL)**를 설정합니다.
-     - URL(URL): `URL` 변수
+     - 필드 값(Value): `Shortcut Input`
+   - **Otherwise**에는 파일용 **URL의 콘텐츠 가져오기(Get Contents of URL)**:
+     - URL: `URL` 변수
      - 방법(Method): `POST`
      - 요청 본문(Request Body): `Form`
-     - 필드 이름(Key): `content`
-     - 필드 값(Value): 단축어 입력 파일
+     - 파일 필드 이름(Key): `content`
+     - 파일 필드 값(Value): `Shortcut Input`
+     - 파일명은 `Get Details of Files`에서 `File Path`를 가져온 뒤 `/`로 Split하고 마지막 항목을 사용합니다.
      - 파일명 필드 이름(Key): `name`
-     - 파일명 필드 값(Value): `Get Details of Files`의 `Name`
-9. 필요하면 **알림 표시(Show Notification)** 또는 **결과 보기(Show Result)** 액션을 `End If` 다음에 추가합니다.
-
-세션 코드는 실행할 때마다 묻지 않습니다. 다른 세션을 사용하려면 3번의 Text 액션 값을 수정합니다.
+     - 파일명 필드 값(Value): 경로를 Split한 결과의 마지막 항목
+8. 필요하면 **알림 표시(Show Notification)** 또는 **결과 보기(Show Result)** 액션을 `End If` 다음에 추가합니다.
 
 최종 요청 URL의 형식은 다음과 같습니다.
 
@@ -60,7 +61,7 @@ iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 �
 POST https://drop5.net/<session-code>/upload
 ```
 
-`/upload/<session-code>`가 아니라 기존 Drop5 경로 구조인 `/<session-code>/upload`를 사용합니다. 서버는 요청 본문이 Form이면 파일로, JSON이면 텍스트로 판단합니다. 세션 코드가 새 코드여도 세션을 만들며, 호스트 승인을 기다리지 않고 파일을 저장합니다.
+`/upload/<session-code>`가 아니라 기존 Drop5 경로 구조인 `/<session-code>/upload`를 사용합니다. 서버는 JSON의 `content`를 텍스트로, Form의 `content`를 파일로 처리하고 Form의 `name`을 파일명으로 사용합니다. 세션 코드가 새 코드여도 세션을 만들며, 호스트 승인을 기다리지 않고 파일을 저장합니다.
 
 ---
 
