@@ -114,19 +114,20 @@ class TestCodeSanitization(unittest.TestCase):
         # IMPROVED: Invalid codes with path traversal are now rejected
         result = sanitize_session_code('../etc/passwd')
         self.assertIsNone(result)  # Path traversal rejected
-        
+
+        result = sanitize_session_code('session.json')
+        self.assertIsNone(result)  # File extension-like code rejected
+
         result = sanitize_session_code('test<script>')
-        self.assertEqual(result, 'testscript')  # HTML tags removed, not rejected
-        
+        self.assertIsNone(result)  # Invalid chars rejected
+
         result = sanitize_session_code('test; rm -rf /')
         self.assertIsNone(result)  # Path traversal chars rejected
     
     def test_code_length_limit(self):
         """Test that code length is limited to 128 characters."""
         long_code = 'a' * 200
-        sanitized = sanitize_session_code(long_code)
-        self.assertIsNotNone(sanitized)
-        self.assertEqual(len(sanitized), 128)
+        self.assertIsNone(sanitize_session_code(long_code))
     
     def test_null_and_empty_codes(self):
         """Test that null and empty codes are handled."""

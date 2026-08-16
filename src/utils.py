@@ -150,19 +150,20 @@ def sanitize_session_code(code):
     
     SECURITY: Reject codes that contain path traversal indicators or are empty after sanitization.
     """
-    if not code:
+    if not isinstance(code, str):
         return None
-    # SECURITY: Check for path traversal indicators before sanitization
-    code_str = str(code)
-    if '..' in code_str or '/' in code_str or '\\' in code_str:
+
+    code_str = code.strip()
+    if not code_str:
         return None
-    # Allow only alphanumeric, hyphen, underscore.
-    # Max length 128 characters (enough for long custom codes but safe for FS)
-    sanitized = re.sub(r'[^a-zA-Z0-9\-_]', '', code_str)
-    # SECURITY: Return None if sanitized result is empty or was significantly altered
-    if not sanitized or len(sanitized) < 3:
+
+    if '..' in code_str or '/' in code_str or '\\' in code_str or '.' in code_str:
         return None
-    return sanitized[:128]
+
+    if not re.fullmatch(r'[A-Za-z0-9_-]{3,128}', code_str):
+        return None
+
+    return code_str
 
 # Performance optimization: In-memory cache of used session codes
 # Reduces file system checks from potentially thousands to just directory scans

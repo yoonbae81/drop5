@@ -68,6 +68,7 @@ def cleanup_session(code_dir):
     now = time.time()
     files_active = False
     real_files_count = 0
+    had_expired_file = False
     deleted_size = 0  # Track total size of deleted files for cache update
 
     try:
@@ -82,10 +83,9 @@ def cleanup_session(code_dir):
                 if entry.name.startswith('.'):
                     continue
 
-                real_files_count += 1
-
                 # Cleanup expired files
                 if entry.is_file():
+                    real_files_count += 1
                     try:
                         stat = entry.stat()
                         if now - stat.st_mtime > FILE_TIMEOUT:
@@ -93,6 +93,7 @@ def cleanup_session(code_dir):
                             deleted_size += stat.st_size
                             os.remove(entry.path)
                             real_files_count -= 1
+                            had_expired_file = True
                         else:
                             files_active = True
                     except OSError:
@@ -107,13 +108,11 @@ def cleanup_session(code_dir):
         except Exception:
             pass  # Cache update is optional
 
-    # Remove session if empty and no active files
-    if real_files_count == 0 and not files_active:
-        # Only remove if directory has existed for at least 300 seconds (5 min)
+    # Remove session directory if all files in this pass were expired and no active files remain.
+    if had_expired_file and real_files_count == 0 and not files_active:
         try:
-            if now - os.path.getmtime(code_dir) > 300:
-                shutil.rmtree(code_dir)
-                return True
+            shutil.rmtree(code_dir)
+            return True
         except OSError:
             pass
 
@@ -147,6 +146,7 @@ def cleanup_all_sessions():
                     # Clean expired files in this session
                     has_active_files = False
                     remaining_files_count = 0
+                    had_expired_file = False
 
                     with os.scandir(code_dir) as file_entries:
                         for file_entry in file_entries:
@@ -158,27 +158,25 @@ def cleanup_all_sessions():
                             if file_entry.name.startswith('.'):
                                 continue
 
-                            remaining_files_count += 1
-
                             if file_entry.is_file():
+                                remaining_files_count += 1
                                 try:
                                     stat = file_entry.stat()
                                     if now - stat.st_mtime > FILE_TIMEOUT:
                                         os.remove(file_entry.path)
                                         remaining_files_count -= 1
+                                        had_expired_file = True
                                     else:
                                         has_active_files = True
                                 except OSError:
                                     pass
 
                     # Remove session directory if empty and no active files
-                    if remaining_files_count == 0 and not has_active_files:
-                        # Only remove if directory is old enough
-                        if now - dir_mtime > 300:
-                            try:
-                                shutil.rmtree(code_dir)
-                            except OSError:
-                                pass
+                    if had_expired_file and remaining_files_count == 0 and not has_active_files:
+                        try:
+                            shutil.rmtree(code_dir)
+                        except OSError:
+                            pass
                 except OSError:
                     pass
     except OSError:

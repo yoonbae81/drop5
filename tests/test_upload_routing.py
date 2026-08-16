@@ -11,6 +11,20 @@ import main
 
 
 class TestUploadRouting(unittest.TestCase):
+    def test_invalid_code_with_extension_is_rejected_400(self):
+        mock_response = MagicMock()
+        request = MagicMock()
+
+        with (
+            patch.object(main, 'request', request),
+            patch.object(main, 'response', mock_response),
+            patch.object(main, 'set_security_headers'),
+        ):
+            result = main.files_api('payload.json')
+
+        self.assertEqual(result, {'success': False, 'error': 'Invalid code'})
+        self.assertEqual(mock_response.status, 400)
+
     def test_delete_all_preserves_session_state(self):
         with tempfile.TemporaryDirectory() as upload_dir:
             code_dir = os.path.join(upload_dir, 'session')

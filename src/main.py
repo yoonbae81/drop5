@@ -162,6 +162,7 @@ def files_api(code):
     
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
+        response.status = 400
         return {'success': False, 'error': 'Invalid code'}
     
     client_id = request.query.get('clientId')
@@ -319,6 +320,9 @@ def main_page(code):
     
     # Prevent static files from being treated as session codes
     if not code or code in ('static', 'style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico', 'robots.txt', 'sitemap.xml'):
+        if re.search(r'\.[A-Za-z0-9]{1,32}$', request.path or ''):
+            response.status = 400
+            return {'error': 'Invalid code'}
         redirect(BASE_URL if BASE_URL else '/')
         
     code_dir = os.path.join(UPLOAD_DIR, code)
@@ -381,6 +385,7 @@ def join_session(code):
     
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
+        response.status = 400
         return {'success': False, 'error': 'Invalid code'}
     
     data = request.json or {}
@@ -465,6 +470,7 @@ def heartbeat(code):
     
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
+        response.status = 400
         return {'success': False, 'error': 'Invalid code'}
         
     data = request.json or {}
@@ -555,6 +561,7 @@ def approve_client(code):
     
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
+        response.status = 400
         return {'success': False, 'error': 'Invalid code'}
     data = request.json or {}
     host_id = data.get('clientId')
@@ -744,6 +751,7 @@ def delete_all_files(code):
 
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
+        response.status = 400
         return {'success': False, 'error': 'Invalid code'}
 
     code_dir = os.path.join(UPLOAD_DIR, code)
@@ -918,7 +926,7 @@ def download(code, filename):
     
     code = sanitize_session_code(code)
     if not code or code in ('style.css', 'app.js', 'stylecss', 'appjs', 'favicon.ico', 'faviconico'):
-        abort(404, "Invalid session")
+        abort(400, "Invalid session")
     
     code_dir = os.path.join(UPLOAD_DIR, code)
 

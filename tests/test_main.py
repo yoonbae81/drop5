@@ -85,6 +85,24 @@ class TestMain(unittest.TestCase):
         self.assertTrue(os.path.exists(file_path))
         self.assertTrue(os.path.exists(code_dir))
 
+    def test_cleanup_session_removes_expired_session_dir_immediately(self):
+        """Test that a session directory is removed after expired files are deleted."""
+        code = "77777"
+        code_dir = os.path.join(self.test_upload_dir, code)
+        os.makedirs(code_dir)
+        
+        file_path = os.path.join(code_dir, 'old.txt')
+        with open(file_path, 'w') as f:
+            f.write('expired')
+            
+        past = time.time() - 600
+        os.utime(file_path, (past, past))
+        
+        main.cleanup_session(code_dir)
+        
+        self.assertFalse(os.path.exists(file_path))
+        self.assertFalse(os.path.exists(code_dir))
+
     def test_check_approval_or_auto_approve(self):
         """Test the atomic auto-approval logic"""
         code = "atomic1"
