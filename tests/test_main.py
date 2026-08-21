@@ -62,11 +62,7 @@ class TestMain(unittest.TestCase):
         
         self.assertFalse(os.path.exists(file_path))
         
-        # Directory mtime was updated when file was removed, so we need to set it to past again
-        # to test directory removal logic
-        os.utime(code_dir, (past, past))
-        main.cleanup_session(code_dir)
-        
+        # The hardened cleanup removes the now-empty session immediately.
         self.assertFalse(os.path.exists(code_dir))
 
     def test_cleanup_session_keeps_active(self):
@@ -101,6 +97,19 @@ class TestMain(unittest.TestCase):
         main.cleanup_session(code_dir)
         
         self.assertFalse(os.path.exists(file_path))
+        self.assertFalse(os.path.exists(code_dir))
+
+    def test_cleanup_session_removes_stale_empty_session_dir(self):
+        """Empty sessions must not survive forever just because no file expired."""
+        code_dir = os.path.join(self.test_upload_dir, 'empty-stale')
+        os.makedirs(code_dir)
+        past = time.time() - 600
+        os.utime(code_dir, (past, past))
+
+        from src import session as session_module
+        with patch.object(session_module, 'FILE_TIMEOUT', 1):
+            session_module.cleanup_session(code_dir)
+
         self.assertFalse(os.path.exists(code_dir))
 
     def test_check_approval_or_auto_approve(self):

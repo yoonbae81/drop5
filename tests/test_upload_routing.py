@@ -11,6 +11,21 @@ import main
 
 
 class TestUploadRouting(unittest.TestCase):
+    def test_dotted_session_route_is_rejected_before_handlers(self):
+        request = MagicMock()
+        request.path = '/imgphp.php'
+        response = MagicMock()
+
+        with (
+            patch.object(main, 'request', request),
+            patch.object(main, 'response', response),
+            patch.object(main, 'cleanup_all_sessions'),
+        ):
+            result = main.reject_dotted_session_routes()
+
+        self.assertEqual(result, {'error': 'Invalid route'})
+        self.assertEqual(response.status, 400)
+
     def test_invalid_code_with_extension_is_rejected_400(self):
         mock_response = MagicMock()
         request = MagicMock()

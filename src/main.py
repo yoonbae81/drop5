@@ -6,6 +6,7 @@ import time
 import re
 import json
 import traceback
+import threading
 try:
     from script_reporter import ScriptReporter
 except ImportError:
@@ -32,6 +33,67 @@ from src.audit import log_action, calculate_file_hash
 from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info, SUPPORTED_LANGUAGES
 
 app = Bottle()
+
+# Route-level protection must run before any handler can create a session
+# directory.  Attackers routinely probe for names such as ``imgphp.php``;
+# those requests must never be interpreted as session codes.
+_STATIC_ROUTE_PATHS = {'/style.css', '/app.js', '/favicon.ico'}
+_CLEANUP_INTERVAL = 60
+_last_global_cleanup = 0
+
+
+def _cleanup_worker():
+    """Keep cleanup running even when the server receives no requests."""
+    while True:
+        time.sleep(_CLEANUP_INTERVAL)
+        try:
+            cleanup_all_sessions()
+        except Exception as error:
+            # Cleanup must never terminate the application worker.
+            print(f"Cleanup worker error: {error}")
+
+
+_cleanup_thread = threading.Thread(
+    target=_cleanup_worker,
+    name='drop5-cleanup',
+    daemon=True,
+)
+_cleanup_thread.start()
+
+
+def _path_without_url_prefix(path):
+    """Return the request path with the configured application prefix removed."""
+    path = path or '/'
+    if URL_PREFIX and URL_PREFIX != '/' and path == URL_PREFIX:
+        return '/'
+    if URL_PREFIX and URL_PREFIX != '/' and path.startswith(URL_PREFIX + '/'):
+        return path[len(URL_PREFIX):] or '/'
+    return path
+
+
+@app.hook('before_request')
+def reject_dotted_session_routes():
+    """Reject dotted dynamic route segments before route handlers run.
+
+    Dots are valid in download filenames and in the explicitly registered
+    static assets, but never in a session-code segment.  Keeping this check at
+    the request boundary prevents invalid probes from reaching any mkdir path.
+    """
+    global _last_global_cleanup
+
+    path = _path_without_url_prefix(request.path)
+    if path not in _STATIC_ROUTE_PATHS:
+        first_segment = path.lstrip('/').split('/', 1)[0]
+        if '.' in first_segment:
+            response.status = 400
+            return {'error': 'Invalid route'}
+
+    # Run the full sweep at most once per worker per interval.  This recovers
+    # abandoned/empty session directories even when they are never requested.
+    now = time.time()
+    if now - _last_global_cleanup >= _CLEANUP_INTERVAL:
+        _last_global_cleanup = now
+        cleanup_all_sessions()
 
 # Initialize Error Reporter
 reporter = None

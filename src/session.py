@@ -68,8 +68,8 @@ def cleanup_session(code_dir):
     now = time.time()
     files_active = False
     real_files_count = 0
-    had_expired_file = False
     deleted_size = 0  # Track total size of deleted files for cache update
+    newest_activity = 0
 
     try:
         # Single scandir() call for both cleanup and empty check
@@ -77,10 +77,10 @@ def cleanup_session(code_dir):
             for entry in entries:
                 # Skip session state file
                 if entry.name == '.session.json':
-                    continue
-
-                # Skip hidden files (but still count them for directory removal logic)
-                if entry.name.startswith('.'):
+                    try:
+                        newest_activity = max(newest_activity, entry.stat().st_mtime)
+                    except OSError:
+                        pass
                     continue
 
                 # Cleanup expired files
@@ -88,16 +88,23 @@ def cleanup_session(code_dir):
                     real_files_count += 1
                     try:
                         stat = entry.stat()
+                        newest_activity = max(newest_activity, stat.st_mtime)
                         if now - stat.st_mtime > FILE_TIMEOUT:
                             # Track size before deletion for cache update
                             deleted_size += stat.st_size
                             os.remove(entry.path)
                             real_files_count -= 1
-                            had_expired_file = True
                         else:
                             files_active = True
                     except OSError:
                         pass  # Ignore race conditions
+                else:
+                    # Unknown subdirectories are activity and prevent removal
+                    # until their parent is handled explicitly.
+                    try:
+                        newest_activity = max(newest_activity, entry.stat().st_mtime)
+                    except OSError:
+                        pass
     except OSError:
         return False
 
@@ -108,8 +115,12 @@ def cleanup_session(code_dir):
         except Exception:
             pass  # Cache update is optional
 
-    # Remove session directory if all files in this pass were expired and no active files remain.
-    if had_expired_file and real_files_count == 0 and not files_active:
+    # Remove empty/abandoned sessions even when they only contain stale state.
+    # The old code required an expired file to be found in this invocation,
+    # which left empty directories behind indefinitely.
+    if real_files_count == 0 and not files_active and (
+        not newest_activity or now - newest_activity > FILE_TIMEOUT
+    ):
         try:
             shutil.rmtree(code_dir)
             return True
@@ -127,56 +138,31 @@ def cleanup_all_sessions():
     if not os.path.exists(UPLOAD_DIR):
         return
 
-    now = time.time()
+    # Gunicorn may run several workers.  Serialize periodic sweeps so workers
+    # do not scan/delete the same session tree concurrently.
+    # Keep the coordination file beside UPLOAD_DIR, never inside the user
+    # visible upload tree.
+    lock_path = f'{UPLOAD_DIR}.cleanup.lock'
+    try:
+        with open(lock_path, 'w') as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _cleanup_all_sessions_locked()
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+    except (BlockingIOError, OSError):
+        return
 
-    # Iterate through all session directories using scandir
+
+def _cleanup_all_sessions_locked():
+    """Sweep sessions while the caller holds the cleanup lock."""
+    # Iterate through all session directories using the same hardened cleanup
+    # path as per-session requests.  This also removes empty stale sessions.
     try:
         with os.scandir(UPLOAD_DIR) as session_entries:
             for session_entry in session_entries:
                 if not session_entry.is_dir():
                     continue
-
-                code_dir = session_entry.path
-
                 try:
-                    # Get directory mtime from cached scandir stat
-                    dir_stat = session_entry.stat()
-                    dir_mtime = dir_stat.st_mtime
-
-                    # Clean expired files in this session
-                    has_active_files = False
-                    remaining_files_count = 0
-                    had_expired_file = False
-
-                    with os.scandir(code_dir) as file_entries:
-                        for file_entry in file_entries:
-                            # Skip session state file
-                            if file_entry.name == '.session.json':
-                                continue
-
-                            # Skip hidden files
-                            if file_entry.name.startswith('.'):
-                                continue
-
-                            if file_entry.is_file():
-                                remaining_files_count += 1
-                                try:
-                                    stat = file_entry.stat()
-                                    if now - stat.st_mtime > FILE_TIMEOUT:
-                                        os.remove(file_entry.path)
-                                        remaining_files_count -= 1
-                                        had_expired_file = True
-                                    else:
-                                        has_active_files = True
-                                except OSError:
-                                    pass
-
-                    # Remove session directory if empty and no active files
-                    if had_expired_file and remaining_files_count == 0 and not has_active_files:
-                        try:
-                            shutil.rmtree(code_dir)
-                        except OSError:
-                            pass
+                    cleanup_session(session_entry.path)
                 except OSError:
                     pass
     except OSError:
