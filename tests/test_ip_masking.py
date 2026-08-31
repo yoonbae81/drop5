@@ -5,11 +5,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from src.audit import mask_ip, log_action
+from src.audit import mask_ip
 from src.config import MASK_IP_IN_LOGS
-import json
-import tempfile
-import shutil
 
 
 class TestIPMasking(unittest.TestCase):
@@ -85,13 +82,11 @@ class TestMaskingConfig(unittest.TestCase):
 
     def test_config_exists(self):
         """Test that MASK_IP_IN_LOGS configuration exists."""
-        from src.config import MASK_IP_IN_LOGS
         # Should be a boolean
         self.assertIsInstance(MASK_IP_IN_LOGS, bool)
 
     def test_config_default_true(self):
         """Test that MASK_IP_IN_LOGS defaults to True for privacy."""
-        from src.config import MASK_IP_IN_LOGS
         # Default should be True for GDPR compliance
         self.assertTrue(MASK_IP_IN_LOGS)
 

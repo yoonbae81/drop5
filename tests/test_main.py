@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import sys
 import os
 import shutil
@@ -24,7 +25,6 @@ class TestMain(unittest.TestCase):
         
         # Override module constants for testing
         main.UPLOAD_DIR = self.test_upload_dir
-        main.FILE_TIMEOUT = 1 # 1 second for fast testing
 
     def tearDown(self):
         """Clean up after tests"""
@@ -121,7 +121,7 @@ class TestMain(unittest.TestCase):
         
         # 1. First user should be auto-approved (IP: 1.1.1.1)
         from bottle import request
-        with unittest.mock.patch.dict(request.environ, {'REMOTE_ADDR': '1.1.1.1'}):
+        with mock.patch.dict(request.environ, {'REMOTE_ADDR': '1.1.1.1'}):
             result = main.check_approval_or_auto_approve(code, client_id, code_dir)
             self.assertTrue(result)
         
@@ -133,7 +133,7 @@ class TestMain(unittest.TestCase):
         
         # 2. Second user from DIFFERENT IP should NOT be auto-approved
         client_id_2 = "test_client_2"
-        with unittest.mock.patch.dict(request.environ, {'REMOTE_ADDR': '2.2.2.2'}):
+        with mock.patch.dict(request.environ, {'REMOTE_ADDR': '2.2.2.2'}):
             result_2 = main.check_approval_or_auto_approve(code, client_id_2, code_dir)
             self.assertFalse(result_2)
         

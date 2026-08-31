@@ -1,0 +1,10 @@
+{
+  "lsp": {
+    "basedpyright": {
+      "priority": 100
+    },
+    "ruff": {
+      "priority": 90
+    }
+  }
+}

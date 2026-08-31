@@ -1,6 +1,5 @@
 import os
 import time
-import glob
 import shutil
 import json
 import fcntl
@@ -377,8 +376,8 @@ def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True
     Returns:
         Updated total size or None on error
     """
+    result: list[int | None] = [None]
     try:
-        result = [None]
         def update_cache(state):
             if set_absolute is not None:
                 # Set to absolute value

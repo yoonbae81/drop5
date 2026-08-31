@@ -13,7 +13,7 @@ except ImportError:
     ScriptReporter = None
 
 from src.config import (
-    UPLOAD_DIR, FILE_TIMEOUT, MAX_FILE_SIZE, MAX_STORAGE_SIZE,
+    UPLOAD_DIR, MAX_FILE_SIZE, MAX_STORAGE_SIZE,
     PORT, DEBUG, BASE_URL, URL_PREFIX, DEFAULT_LANGUAGE, LANGUAGE_COOKIE_NAME,
     UMAMI_ID, UMAMI_URL, MAX_FILES,
     CONTACT_EMAIL, COMPANY_NAME
@@ -25,12 +25,11 @@ from src.utils import (
 )
 from src.session import (
     get_session_size, cleanup_session, cleanup_all_sessions,
-    get_active_files, load_session_state, save_session_state,
-    cleanup_stale_clients, is_client_approved, clear_session_files,
+    get_active_files, load_session_state, cleanup_stale_clients, is_client_approved, clear_session_files,
     update_session_state, update_session_size_cache
 )
 from src.audit import log_action, calculate_file_hash
-from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info, SUPPORTED_LANGUAGES
+from src.i18n import detect_language, get_translations, get_available_languages, get_native_language_info
 
 app = Bottle()
 
@@ -103,8 +102,9 @@ if ScriptReporter:
     # Global exception hook for fatal errors outside request context
     import sys
     def global_excepthook(exctype, value, tb):
-        reporter.fail(f"Fatal Service Error: {exctype.__name__}: {value}\n\n"
-                      f"{''.join(traceback.format_exception(exctype, value, tb))}")
+        if reporter is not None:
+            reporter.fail(f"Fatal Service Error: {exctype.__name__}: {value}\n\n"
+                          f"{''.join(traceback.format_exception(exctype, value, tb))}")
         sys.__excepthook__(exctype, value, tb)
     sys.excepthook = global_excepthook
 
@@ -464,6 +464,7 @@ def join_session(code):
         return {'success': False, 'error': 'Session not found'}
         
     def update_join(state):
+        ip = get_client_ip()
         # Check if we have an approved host before cleanup
         had_host = any(c['status'] == 'approved' for c in state['clients'].values())
         
@@ -482,7 +483,6 @@ def join_session(code):
 
             # New client logic
             # If no active host exists OR this IP was successfully approved before
-            ip = get_client_ip()
             is_trusted = isinstance(trusted_ips, dict) and ip in trusted_ips
             
             if not has_host or is_trusted:
@@ -550,8 +550,6 @@ def heartbeat(code):
         return {'success': False, 'error': 'Session not found'}
         
     def update_heartbeat(state):
-        # Check host status
-        had_host = any(c['status'] == 'approved' for c in state['clients'].values())
         cleanup_stale_clients(state)
         has_host = any(c['status'] == 'approved' for c in state['clients'].values())
         
@@ -639,7 +637,7 @@ def approve_client(code):
         
     code_dir = os.path.join(UPLOAD_DIR, code)
     
-    update_result = [None]
+    update_result: list[str | None] = [None]
     def update_approval_v2(state):
         if not is_client_approved(state, host_id):
             update_result[0] = 'unauthorized'
@@ -819,7 +817,7 @@ def delete_all_files(code):
     code_dir = os.path.join(UPLOAD_DIR, code)
 
     # Check Client Approval
-    client_id = request.forms.get('clientId') or request.json.get('clientId')
+    client_id = request.forms.get('clientId') or (request.json or {}).get('clientId')
 
     # SECURITY: Validate client ID format
     if not validate_client_id(client_id):
@@ -912,6 +910,8 @@ def upload_text(code):
         
         target_filename = f"{filename_base}.txt"
         normalized_filename = normalize_filename(target_filename)
+        if not normalized_filename:
+            return {'success': False, 'error': 'Invalid filename'}
         filepath = os.path.join(code_dir, normalized_filename)
         
         # Logic: Overwrite if content is same, create different file if different
@@ -925,6 +925,8 @@ def upload_text(code):
                 while True:
                     new_filename = f"{filename_base} ({counter}).txt"
                     normalized_new = normalize_filename(new_filename)
+                    if not normalized_new:
+                        return {'success': False, 'error': 'Invalid filename'}
                     new_filepath = os.path.join(code_dir, normalized_new)
                     if not os.path.exists(new_filepath):
                         filepath = new_filepath

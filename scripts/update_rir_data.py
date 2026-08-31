@@ -100,7 +100,7 @@ def process_data(filepaths):
     for filepath in filepaths:
         try:
             os.remove(filepath)
-        except:
+        except OSError:
             pass
             
     print("Processing Complete")

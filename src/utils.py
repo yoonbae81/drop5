@@ -8,12 +8,12 @@ import urllib.parse
 from bottle import response, request
 from src.config import UPLOAD_DIR, BLOCKED_FILE_EXTENSIONS, MAX_FILENAME_LENGTH, UMAMI_URL, TRUSTED_PROXIES
 
-def get_client_ip():
+def get_client_ip() -> str:
     """Get the client's IP address, handling potential reverse proxies securely."""
     remote_addr = request.remote_addr
     forwarded = request.environ.get('HTTP_X_FORWARDED_FOR')
     
-    if forwarded and TRUSTED_PROXIES:
+    if remote_addr and forwarded and TRUSTED_PROXIES:
         try:
             client_addr = ipaddress.ip_address(remote_addr)
             if any(client_addr in net for net in TRUSTED_PROXIES):
@@ -21,7 +21,7 @@ def get_client_ip():
         except ValueError:
             pass
             
-    return remote_addr
+    return remote_addr or ''
 
 def format_size(size_bytes):
     """Format bytes to kB or MB."""
@@ -167,7 +167,7 @@ def sanitize_session_code(code):
 
 # Performance optimization: In-memory cache of used session codes
 # Reduces file system checks from potentially thousands to just directory scans
-_used_codes = None
+_used_codes: set[str] | None = None
 _last_cache_refresh = 0
 _CACHE_REFRESH_INTERVAL = 10  # seconds
 
@@ -218,6 +218,9 @@ def generate_code():
     # Initialize cache on first call
     if _used_codes is None:
         _refresh_used_codes_cache()
+
+    if _used_codes is None:
+        raise RuntimeError("Unable to initialize the session-code cache")
 
     # Refresh cache if it's stale (periodic refresh)
     now = time.time()

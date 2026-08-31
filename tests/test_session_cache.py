@@ -7,7 +7,6 @@ import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from src.session import get_session_size, update_session_size_cache
-from src.config import UPLOAD_DIR
 
 
 class TestSessionSizeCache(unittest.TestCase):

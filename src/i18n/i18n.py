@@ -6,7 +6,7 @@ Supports 65+ languages with country-separated JSON files.
 import json
 import os
 import ipaddress
-from bottle import request
+from bottle import Request
 from src.utils import get_client_ip
 
 # Configuration
@@ -291,7 +291,7 @@ def load_ip_database():
         return False
 
 
-def search_country(ip_str):
+def search_country(ip_str: str | None) -> str | None:
     """Search country code for a given IP string."""
     if not load_ip_database():
         return None
@@ -314,12 +314,12 @@ def search_country(ip_str):
     return None
 
 
-def get_native_language_info(request):
+def get_native_language_info(request: Request) -> dict[str, str]:
     """Detect native language from IP and return its config."""
     ip = get_client_ip()
     country_code = search_country(ip)
     
-    lang_code = COUNTRY_TO_LANG.get(country_code, DEFAULT_LANGUAGE)
+    lang_code = COUNTRY_TO_LANG.get(country_code or '', DEFAULT_LANGUAGE)
     # If detected language is English or not supported, we might just use Korean as the "native" counterpart
     if lang_code == DEFAULT_LANGUAGE or lang_code not in SUPPORTED_LANGUAGES:
         # Check Accept-Language as fallback for "native"
@@ -345,7 +345,7 @@ def get_native_language_info(request):
     }
 
 
-def detect_language(request) -> str:
+def detect_language(request: Request) -> str:
     """
     Detect user's preferred language using hybrid approach.
     
@@ -374,5 +374,3 @@ def detect_language(request) -> str:
     
     # 4. Fall back to default (English)
     return DEFAULT_LANGUAGE
-
-

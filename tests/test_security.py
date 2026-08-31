@@ -18,29 +18,14 @@ import sys
 import tempfile
 import shutil
 import unicodedata
-from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-try:
-    from bottle import Bottle, request, response, abort, static_file
-    import bottle
-except ImportError:
-    pass  # Will fail at runtime if bottle is not installed
-
 # Import the application
-try:
-    from main import app
-    import main
-    from utils import sanitize_session_code, normalize_filename, decode_filename
-except ImportError:
-    # For testing without full app import
-    app = None
-    sanitize_session_code = None
-    normalize_filename = None
-    decode_filename = None
+import main
+from utils import decode_filename, normalize_filename, sanitize_session_code
 
 
 class TestPathTraversal(unittest.TestCase):
@@ -155,7 +140,6 @@ class TestFilenameSanitization(unittest.TestCase):
     
     def test_malicious_filename_characters(self):
         """Test handling of filenames with special characters."""
-        import unicodedata
         
         # Filenames with null bytes should be rejected
         self.assertIsNone(normalize_filename('test\x00file.txt'))
@@ -257,7 +241,7 @@ class TestDoSProtection(unittest.TestCase):
     
     def test_file_timeout_cleanup(self):
         """Test that expired files are cleaned up."""
-        from main import FILE_TIMEOUT
+        from config import FILE_TIMEOUT
         # Files should expire after FILE_TIMEOUT seconds
         self.assertGreater(FILE_TIMEOUT, 0)
         # Default is 300 seconds (5 minutes), but may be overridden by environment
@@ -354,10 +338,8 @@ class TestSecurityHeaders(unittest.TestCase):
         """Test that cache control headers are set."""
         # The application sets Cache-Control headers
         # This test verifies the headers are being used
-        from main import app
-        
         # Check that routes set cache headers
-        self.assertIsNotNone(app)
+        self.assertIsNotNone(main.app)
 
 
 class TestUnknownSessionAccess(unittest.TestCase):
