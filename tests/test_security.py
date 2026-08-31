@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Import the application
 import main
-from utils import decode_filename, normalize_filename, sanitize_session_code
+from utils import decode_filename, normalize_filename, sanitize_filename, sanitize_session_code
 
 
 class TestPathTraversal(unittest.TestCase):
@@ -148,6 +148,10 @@ class TestFilenameSanitization(unittest.TestCase):
         long_name = 'a' * 1000 + '.txt'
         normalized = normalize_filename(long_name)
         self.assertIsNone(normalized)  # improperly long filename rejected
+
+    def test_session_state_filename_is_rejected(self):
+        """Internal session metadata must never be addressable as a shared file."""
+        self.assertIsNone(sanitize_filename('.session.json'))
 
 
 class TestFileUploadSecurity(unittest.TestCase):

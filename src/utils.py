@@ -85,8 +85,8 @@ def sanitize_filename(filename):
     if '..' in safe_filename or safe_filename.startswith('/') or safe_filename.startswith('\\'):
         return None
     
-    # SECURITY: Reject hidden files (starting with .) except .session.json
-    if safe_filename.startswith('.') and safe_filename != '.session.json':
+    # SECURITY: Reject hidden files, including internal session metadata.
+    if safe_filename.startswith('.'):
         return None
     
     # Reject empty filename after sanitization
