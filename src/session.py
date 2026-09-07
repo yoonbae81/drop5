@@ -337,8 +337,14 @@ def is_client_approved(state, client_id):
     client = state.get('clients', {}).get(client_id)
     return client and client.get('status') == 'approved'
 
-def clear_session_files(code_dir):
-    """Remove all files in session directory except state file."""
+def clear_session_files(code_dir, reset_cache=True):
+    """Remove all files in session directory except state file.
+
+    Callers already inside an update_session_state() callback MUST pass
+    reset_cache=False and reset state['total_size'] themselves: the cache
+    update re-enters update_session_state(), which would try to acquire the
+    exclusive flock already held by the outer call and deadlock the worker.
+    """
     if not os.path.exists(code_dir):
         return
     import shutil
@@ -357,7 +363,8 @@ def clear_session_files(code_dir):
         except Exception as e:
             print(f"  Error deleting {filename}: {e}")
     # Reset cache after clearing files
-    update_session_size_cache(code_dir, 0, set_absolute=0)
+    if reset_cache:
+        update_session_size_cache(code_dir, 0, set_absolute=0)
 
 
 def update_session_size_cache(code_dir, delta_bytes, file_path=None, is_add=True, set_absolute=None):

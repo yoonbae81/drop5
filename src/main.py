@@ -474,9 +474,12 @@ def join_session(code):
         # Check if we still have an approved host
         has_host = any(c['status'] == 'approved' for c in state['clients'].values())
         
-        # If last host disappeared, clear files
+        # If last host disappeared, clear files.  Inside this state callback
+        # the cache must be reset via the state dict itself: the nested update
+        # in clear_session_files() would re-acquire the held flock and deadlock.
         if had_host and not has_host:
-            clear_session_files(code_dir)
+            clear_session_files(code_dir, reset_cache=False)
+            state['total_size'] = 0
 
         if client_id not in state['clients']:
             trusted_ips = state.get('trusted_ips', {})
@@ -512,7 +515,8 @@ def join_session(code):
             if not has_host:
                 # Sort by entry or just pick first available to be deterministic
                 # For simplicity, if NO host exists, current client becomes host
-                clear_session_files(code_dir) # Safety double-check
+                clear_session_files(code_dir, reset_cache=False)  # Safety double-check
+                state['total_size'] = 0
                 state['clients'][client_id]['status'] = 'approved'
 
                 # Record IP as trusted
@@ -581,7 +585,8 @@ def heartbeat(code):
             # PROMOTION LOGIC: If all hosts are gone, promote this client
             if not has_host:
                 # Security: Clear previous host's files
-                clear_session_files(code_dir)
+                clear_session_files(code_dir, reset_cache=False)
+                state['total_size'] = 0
                 state['clients'][client_id]['status'] = 'approved'
                 
                 # Record IP as trusted

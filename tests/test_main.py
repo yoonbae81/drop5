@@ -3,6 +3,7 @@ from unittest import mock
 import sys
 import os
 import shutil
+import threading
 import time
 from unittest.mock import patch
 
@@ -164,6 +165,103 @@ class TestMain(unittest.TestCase):
             )
 
         update.assert_not_called()
+
+    def test_join_after_host_silence_does_not_deadlock(self):
+        """Regression: clearing files inside the join state callback must not
+        re-acquire the session flock (it deadlocked the request worker)."""
+        code = "deadlk01"
+        code_dir = os.path.join(self.test_upload_dir, code)
+        os.makedirs(code_dir)
+
+        from src.session import load_session_state, save_session_state
+        save_session_state(code_dir, {
+            'clients': {
+                'stalehost01': {
+                    'status': 'approved',
+                    'last_seen': time.time() - 400,
+                    'joined_at': time.time() - 400,
+                    'ip': '1.1.1.1',
+                }
+            },
+            'trusted_ips': {'1.1.1.1': time.time() - 400},
+            'total_size': 12345,
+        })
+        with open(os.path.join(code_dir, 'leftover.txt'), 'w') as f:
+            f.write('leftover')
+
+        request = mock.MagicMock()
+        request.json = {'clientId': 'newclient01'}
+        request.get_header.return_value = 'test-agent'
+
+        def run_join():
+            with (
+                patch.object(main, 'request', request),
+                patch.object(main, 'set_security_headers'),
+                patch.object(main, 'get_client_ip', return_value='2.2.2.2'),
+                patch.object(main, 'log_action'),
+            ):
+                main.join_session(code)
+
+        worker = threading.Thread(target=run_join, daemon=True)
+        worker.start()
+        worker.join(timeout=10)
+        self.assertFalse(worker.is_alive(), 'join_session deadlocked on the session flock')
+
+        self.assertFalse(os.path.exists(os.path.join(code_dir, 'leftover.txt')))
+        state = load_session_state(code_dir)
+        self.assertEqual(state['clients']['newclient01']['status'], 'approved')
+        self.assertEqual(state.get('total_size'), 0)
+
+    def test_heartbeat_promotion_does_not_deadlock(self):
+        """Regression: host promotion inside the heartbeat state callback must
+        not re-acquire the session flock (it deadlocked the request worker)."""
+        code = "deadlk02"
+        code_dir = os.path.join(self.test_upload_dir, code)
+        os.makedirs(code_dir)
+
+        from src.session import load_session_state, save_session_state
+        save_session_state(code_dir, {
+            'clients': {
+                'stalehost01': {
+                    'status': 'approved',
+                    'last_seen': time.time() - 400,
+                    'joined_at': time.time() - 400,
+                    'ip': '1.1.1.1',
+                },
+                'newclient01': {
+                    'status': 'pending',
+                    'last_seen': time.time(),
+                    'joined_at': time.time(),
+                    'ip': '2.2.2.2',
+                },
+            },
+            'trusted_ips': {'1.1.1.1': time.time() - 400},
+            'total_size': 999,
+        })
+        with open(os.path.join(code_dir, 'leftover.txt'), 'w') as f:
+            f.write('leftover')
+
+        request = mock.MagicMock()
+        request.json = {'clientId': 'newclient01'}
+
+        result = []
+
+        def run_heartbeat():
+            with (
+                patch.object(main, 'request', request),
+                patch.object(main, 'set_security_headers'),
+                patch.object(main, 'get_client_ip', return_value='2.2.2.2'),
+            ):
+                result.append(main.heartbeat(code))
+
+        worker = threading.Thread(target=run_heartbeat, daemon=True)
+        worker.start()
+        worker.join(timeout=10)
+        self.assertFalse(worker.is_alive(), 'heartbeat deadlocked on the session flock')
+
+        self.assertEqual(result[0]['status'], 'approved')
+        self.assertFalse(os.path.exists(os.path.join(code_dir, 'leftover.txt')))
+        self.assertEqual(load_session_state(code_dir).get('total_size'), 0)
 
 if __name__ == '__main__':
     unittest.main()
