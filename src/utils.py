@@ -59,6 +59,15 @@ def decode_filename(filename):
     
     return filename
 
+_DANGEROUS_FILENAME_CHARS_RE = re.compile(
+    r'[\x00-\x1f\x7f\r\n'
+    r'\u200b-\u200f'  # Zero-width spaces, marks
+    r'\u202a-\u202e'  # Bidi embedding, overrides
+    r'\u2066-\u2069'  # Bidi isolates
+    r'\ufeff\u180e'    # Byte-order mark, mongolian vowel separator
+    r']'
+)
+
 def sanitize_filename(filename):
     """Sanitize filename to prevent path traversal attacks.
     
@@ -70,8 +79,8 @@ def sanitize_filename(filename):
     # First decode the filename from multipart encoding
     decoded = decode_filename(filename)
     
-    # SECURITY: Reject filenames with null bytes
-    if '\x00' in decoded:
+    # SECURITY: Reject filenames with null bytes, control chars, CRLF, zero-width or bidi characters (ASVS V1.3.3, V10.3)
+    if _DANGEROUS_FILENAME_CHARS_RE.search(decoded):
         return None
     
     # Use os.path.basename to strip any directory components
@@ -289,6 +298,8 @@ def set_security_headers():
     response.set_header('X-XSS-Protection', '1; mode=block')
     response.set_header('Referrer-Policy', 'strict-origin-when-cross-origin')
     response.set_header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+    response.set_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    response.set_header('X-Download-Options', 'noopen')
     # Content-Security-Policy for XSS protection
     csp = f"default-src 'self'; script-src 'self' 'unsafe-inline' {UMAMI_URL}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' {UMAMI_URL} https://api-gateway.umami.dev;"
     response.set_header('Content-Security-Policy', csp)

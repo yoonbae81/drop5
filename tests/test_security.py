@@ -345,6 +345,44 @@ class TestSecurityHeaders(unittest.TestCase):
         # Check that routes set cache headers
         self.assertIsNotNone(main.app)
 
+    def test_asvs_security_headers(self):
+        """ASVS V14.2 & V11.1: Verify HSTS, X-Download-Options, and security headers."""
+        from bottle import response
+        from utils import set_security_headers
+        set_security_headers()
+        self.assertEqual(response.headers.get('Strict-Transport-Security'), 'max-age=31536000; includeSubDomains')
+        self.assertEqual(response.headers.get('X-Download-Options'), 'noopen')
+        self.assertEqual(response.headers.get('X-Content-Type-Options'), 'nosniff')
+        self.assertEqual(response.headers.get('X-Frame-Options'), 'DENY')
+
+
+class TestASVSv5Sanitization(unittest.TestCase):
+    """ASVS V1.3.3 & V10.3: Filename sanitization against CRLF, Bidi, and control characters."""
+
+    def test_crlf_rejection(self):
+        """Reject CRLF characters in filename to prevent HTTP response splitting."""
+        self.assertIsNone(sanitize_filename("test\r\nfile.txt"))
+        self.assertIsNone(sanitize_filename("test\nfile.txt"))
+        self.assertIsNone(sanitize_filename("test\rfile.txt"))
+
+    def test_bidi_override_rejection(self):
+        """Reject Bidi control characters used to disguise file extensions."""
+        self.assertIsNone(sanitize_filename("innocent\u202Eexe.pdf"))
+        self.assertIsNone(sanitize_filename("doc\u202Atest.txt"))
+        self.assertIsNone(sanitize_filename("doc\u2066test.txt"))
+
+    def test_zero_width_rejection(self):
+        """Reject zero-width and invisible control characters."""
+        self.assertIsNone(sanitize_filename("test\u200Bfile.txt"))
+        self.assertIsNone(sanitize_filename("test\uFEFFfile.txt"))
+        self.assertIsNone(sanitize_filename("test\u180Efile.txt"))
+
+    def test_control_character_rejection(self):
+        """Reject ASCII control characters (0x01-0x1F, 0x7F)."""
+        self.assertIsNone(sanitize_filename("test\x01file.txt"))
+        self.assertIsNone(sanitize_filename("test\x1Bfile.txt"))
+        self.assertIsNone(sanitize_filename("test\x7Ffile.txt"))
+
 
 class TestUnknownSessionAccess(unittest.TestCase):
     def test_auth_check_does_not_create_missing_session(self):

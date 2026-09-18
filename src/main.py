@@ -94,6 +94,12 @@ def reject_dotted_session_routes():
         _last_global_cleanup = now
         cleanup_all_sessions()
 
+
+@app.hook('after_request')
+def apply_security_headers():
+    """Ensure all responses include standard security headers (ASVS V14.2, V3.2)."""
+    set_security_headers()
+
 # Initialize Error Reporter
 reporter = None
 if ScriptReporter:
