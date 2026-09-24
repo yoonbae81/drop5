@@ -14,16 +14,16 @@ None.
 
 ## Checked artifacts
 
-- `/home/y/drop5/.codex/lsp-client.json`
-- `/home/y/drop5/pyproject.toml`
-- `/home/y/drop5/typings/bottle.pyi`
-- `/home/y/drop5/typings/script_reporter.pyi`
+- `/opt/drop5/.codex/lsp-client.json`
+- `/opt/drop5/pyproject.toml`
+- `/opt/drop5/typings/bottle.pyi`
+- `/opt/drop5/typings/script_reporter.pyi`
 - Current worktree diff for all modified Python and test files
-- `/home/y/drop5/src/main.py`
-- `/home/y/drop5/src/i18n/i18n.py`
-- `/home/y/drop5/src/session.py`
-- `/home/y/drop5/src/utils.py`
-- `/home/y/drop5/scripts/update_rir_data.py`
+- `/opt/drop5/src/main.py`
+- `/opt/drop5/src/i18n/i18n.py`
+- `/opt/drop5/src/session.py`
+- `/opt/drop5/src/utils.py`
+- `/opt/drop5/scripts/update_rir_data.py`
 
 ## Reproduced evidence
 
