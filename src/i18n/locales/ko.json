@@ -41,7 +41,7 @@
   "file_count_exceeded": "파일 개수 제한 초과 (현재 모드: {{mode}}, 최대 {{limit}}개)",
   "device_approval_required": "접근 권한이 없습니다 (장치 승인 필요)",
   "preparing": "준비 중...",
-  "file_too_large_with_max": "{{filename}} 파일이 너무 큽니다 (최대 {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} 파일이 너무 큽니다 (최대 {max_mb}MB)",
   "connection_refused_title": "접속이 거절되었습니다",
   "connection_refused_desc": "호스트가 접속을 거절했습니다."
 }

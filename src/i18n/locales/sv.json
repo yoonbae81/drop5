@@ -41,7 +41,7 @@
   "file_count_exceeded": "Filantalgräns överskriden (nuvarande läge: {{mode}}, max {{limit}} filer)",
   "device_approval_required": "Åtkomst nekad (enhetsgodkännande krävs)",
   "preparing": "Förbereder...",
-  "file_too_large_with_max": "{{filename}} är för stor (max {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} är för stor (max {max_mb}MB)",
   "connection_refused_title": "Anslutning nekad",
   "connection_refused_desc": "Värden nekade anslutningen."
 }

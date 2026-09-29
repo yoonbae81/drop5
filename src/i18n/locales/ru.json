@@ -41,7 +41,7 @@
   "file_count_exceeded": "Превышен лимит количества файлов (текущий режим: {{mode}}, максимум {{limit}} файлов)",
   "device_approval_required": "Доступ запрещен (требуется одобрение устройства)",
   "preparing": "Подготовка...",
-  "file_too_large_with_max": "{{filename}} слишком большой (максимум {{max_mb}}МБ)",
+  "file_too_large_with_max": "{filename} слишком большой (максимум {max_mb}МБ)",
   "connection_refused_title": "Соединение отклонено",
   "connection_refused_desc": "Хост отклонил соединение."
 }

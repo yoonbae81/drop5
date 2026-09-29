@@ -41,7 +41,7 @@
   "file_count_exceeded": "文件數量限制超出 (當前模式: {{mode}}, 最大 {{limit}} 個)",
   "device_approval_required": "訪問被拒絕 (需要設備批准)",
   "preparing": "準備中...",
-  "file_too_large_with_max": "{{filename}} 太大 (最大 {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} 太大 (最大 {max_mb}MB)",
   "connection_refused_title": "連接被拒絕",
   "connection_refused_desc": "主機拒絕了連線。"
 }

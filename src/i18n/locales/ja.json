@@ -41,7 +41,7 @@
   "file_count_exceeded": "ファイル数制限を超過しました (現在のモード: {{mode}}, 最大 {{limit}}個)",
   "device_approval_required": "アクセスが拒否されました (デバイスの承認が必要)",
   "preparing": "準備中...",
-  "file_too_large_with_max": "{{filename}} が大きすぎます (最大 {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} が大きすぎます (最大 {max_mb}MB)",
   "connection_refused_title": "接続が拒否されました",
   "connection_refused_desc": "ホストが接続を拒拒しました。"
 }

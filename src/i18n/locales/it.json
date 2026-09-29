@@ -41,7 +41,7 @@
   "file_count_exceeded": "Limite numero file superato (modalità attuale: {{mode}}, max {{limit}} file)",
   "device_approval_required": "Accesso negato (approvazione dispositivo richiesta)",
   "preparing": "Preparazione...",
-  "file_too_large_with_max": "{{filename}} è troppo grande (max {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} è troppo grande (max {max_mb}MB)",
   "connection_refused_title": "Connessione rifiutata",
   "connection_refused_desc": "L'host ha rifiutato la connessione."
 }

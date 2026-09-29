@@ -41,7 +41,7 @@
   "file_count_exceeded": "Vượt quá giới hạn số lượng tệp (chế độ hiện tại: {{mode}}, tối đa {{limit}} tệp)",
   "device_approval_required": "Truy cập bị từ chối (cần phê duyệt thiết bị)",
   "preparing": "Đang chuẩn bị...",
-  "file_too_large_with_max": "{{filename}} quá lớn (tối đa {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} quá lớn (tối đa {max_mb}MB)",
   "connection_refused_title": "Kết nối bị từ chối",
   "connection_refused_desc": "Máy chủ đã từ chối kết nối."
 }

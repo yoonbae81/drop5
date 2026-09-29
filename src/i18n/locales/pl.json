@@ -41,7 +41,7 @@
   "file_count_exceeded": "Przekroczono limit liczby plików (aktualny tryb: {{mode}}, maksimum {{limit}} plików)",
   "device_approval_required": "Dostęp odmówiony (wymagane zatwierdzenie urządzenia)",
   "preparing": "Przygotowanie...",
-  "file_too_large_with_max": "{{filename}} jest za duży (maksimum {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} jest za duży (maksimum {max_mb}MB)",
   "connection_refused_title": "Połączenie odrzucone",
   "connection_refused_desc": "Host odrzucił połączenie."
 }

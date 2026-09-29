@@ -41,7 +41,7 @@
   "file_count_exceeded": "Bestandsaantal limiet overschreden (huidige modus: {{mode}}, max {{limit}} bestanden)",
   "device_approval_required": "Toegang geweigerd (apparaatgoedkeuring vereist)",
   "preparing": "Voorbereiden...",
-  "file_too_large_with_max": "{{filename}} is te groot (max {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} is te groot (max {max_mb}MB)",
   "connection_refused_title": "Verbinding geweigerd",
   "connection_refused_desc": "Host heeft de verbinding geweigerd."
 }

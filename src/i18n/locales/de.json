@@ -41,7 +41,7 @@
   "file_count_exceeded": "Dateianzahl-Limit überschritten (aktueller Modus: {{mode}}, max {{limit}} Dateien)",
   "device_approval_required": "Zugriff verweigert (Gerätegenehmigung erforderlich)",
   "preparing": "Vorbereitung...",
-  "file_too_large_with_max": "{{filename}} ist zu groß (max {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} ist zu groß (max {max_mb}MB)",
   "connection_refused_title": "Verbindung abgelehnt",
   "connection_refused_desc": "Der Host hat die Verbindung abgelehnt."
 }

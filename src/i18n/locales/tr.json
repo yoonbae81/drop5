@@ -41,7 +41,7 @@
   "file_count_exceeded": "Dosya sayısı limiti aşıldı (geçerli mod: {{mode}}, maksimum {{limit}} dosya)",
   "device_approval_required": "Erişim reddedildi (cihaz onayı gerekli)",
   "preparing": "Hazırlanıyor...",
-  "file_too_large_with_max": "{{filename}} çok büyük (maksimum {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} çok büyük (maksimum {max_mb}MB)",
   "connection_refused_title": "Bağlantı reddedildi",
   "connection_refused_desc": "Ana bilgisayar bağlantıyı reddetti."
 }

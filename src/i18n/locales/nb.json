@@ -41,7 +41,7 @@
   "file_count_exceeded": "Filtellgrense overskredet (nåværende modus: {{mode}}, maks {{limit}} filer)",
   "device_approval_required": "Tilgang nektet (enhetsgodkjenning kreves)",
   "preparing": "Forbereder...",
-  "file_too_large_with_max": "{{filename}} er for stor (maks {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} er for stor (maks {max_mb}MB)",
   "connection_refused_title": "Tilkobling nektet",
   "connection_refused_desc": "Verten avviste tilkoblingen."
 }

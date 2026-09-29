@@ -41,7 +41,7 @@
   "file_count_exceeded": "Limite de arquivos excedido (modo atual: {{mode}}, máximo {{limit}} arquivos)",
   "device_approval_required": "Acesso negado (aprovação do dispositivo necessária)",
   "preparing": "Preparando...",
-  "file_too_large_with_max": "{{filename}} é muito grande (máximo {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} é muito grande (máximo {max_mb}MB)",
   "connection_refused_title": "Conexão recusada",
   "connection_refused_desc": "O host recusou a conexão."
 }

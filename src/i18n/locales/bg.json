@@ -41,7 +41,7 @@
   "file_count_exceeded": "File count limit exceeded (current mode: {{mode}}, max {{limit}} files)",
   "device_approval_required": "Access denied (device approval required)",
   "preparing": "Preparing...",
-  "file_too_large_with_max": "{{filename}} is too large (max {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} is too large (max {max_mb}MB)",
   "connection_refused_title": "Connection refused",
   "connection_refused_desc": "Host refused the connection"
 }

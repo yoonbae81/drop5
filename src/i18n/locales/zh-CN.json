@@ -41,7 +41,7 @@
   "file_count_exceeded": "文件数量限制超出 (当前模式: {{mode}}, 最大 {{limit}} 个)",
   "device_approval_required": "访问被拒绝 (需要设备批准)",
   "preparing": "准备中...",
-  "file_too_large_with_max": "{{filename}} 太大 (最大 {{max_mb}}MB)",
+  "file_too_large_with_max": "{filename} 太大 (最大 {max_mb}MB)",
   "connection_refused_title": "连接被拒绝",
   "connection_refused_desc": "主机拒绝了连接。"
 }
