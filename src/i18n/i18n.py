@@ -245,8 +245,11 @@ def parse_accept_language(header: str) -> str:
         if ';' in part:
             lang, q = part.split(';', 1)
             lang = lang.strip()
-            # Extract q value (default 1.0)
-            q = float(q.split('=')[1].strip()) if '=' in q else 1.0
+            # Extract q value (default 1.0); fall back to 1.0 on malformed values
+            try:
+                q = float(q.split('=')[1].strip()) if '=' in q else 1.0
+            except (ValueError, IndexError):
+                q = 1.0
         else:
             lang = part
             q = 1.0
