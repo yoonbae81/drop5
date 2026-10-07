@@ -30,3 +30,8 @@ audit/
 *.log
 src/i18n/rsc/
 *.cleanup.lock
+
+# Cloudflare Workers
+node_modules/
+.wrangler/
+.dev.vars

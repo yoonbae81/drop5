@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "drop5",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "drop5-files" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSIONS", "class_name": "Session" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Session"] }
+  ],
+  "vars": {
+    "MAX_FILE_SIZE": "31457280",
+    "MAX_STORAGE_SIZE": "104857600",
+    "MAX_FILES": "30",
+    "FILE_TTL_SECONDS": "300"
+  }
+}
