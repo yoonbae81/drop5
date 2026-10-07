@@ -1,5 +1,39 @@
 # Drop5 — Ephemeral File Sharing Service
 
+> **Cloudflare port status:** the Workers implementation is functionally complete and validated locally. The Python deployment remains the production service until the separately approved Cloudflare resource setup and traffic switchover are performed.
+
+## Cloudflare development
+
+The Cloudflare app uses one Worker for routing and static assets, one SQLite-backed Durable Object per session, and a private R2 bucket for file contents. Wrangler emulates those bindings locally, so local development does not create or require Cloudflare account resources:
+
+```sh
+npm ci
+npm run dev
+```
+
+The browser UI uses the same `/<session>/join`, `/files`, `/upload`, `/approve`, `/delete_all`, and `/download/<name>` API shape. iOS Shortcut uploads remain supported without a browser client ID. No Cloudflare account resources are created or deployed by this repository setup.
+
+The UI locale is negotiated once from `Accept-Language` by the Worker, and the browser loads only the selected locale JSON plus English as the per-key fallback. The same locale is used for structured API errors.
+
+Run the complete local gate before shipping Cloudflare changes:
+
+```sh
+npm run validate:cloudflare
+```
+
+It performs the TypeScript check, Workers-runtime Vitest suite (including i18n, Durable Object, R2, alarm, WebSocket hibernation, approval, quota, and security boundaries), and a Wrangler dry-run bundle.
+
+## Cloudflare switchover
+
+The R2 bucket must remain private. The Durable Object alarm is the authoritative five-minute TTL; a one-day R2 lifecycle rule is only an orphan-object safety net. During the approved production setup, add and verify the rule with:
+
+```sh
+npx wrangler r2 bucket lifecycle add drop5-files expire-orphans-after-one-day "" --expire-days 1
+npx wrangler r2 bucket lifecycle list drop5-files
+```
+
+These commands mutate the configured Cloudflare account and are **not** part of local setup or validation. Configure Cloudflare WAF/rate limits before routing production traffic. See [the switchover runbook](docs/cloudflare-switchover.md) and [the architecture/porting guide](docs/cloudflare-porting-guide.md).
+
 <strong>Drop5</strong>는 <strong>OS가 서로 다른 개인 기기 간</strong>의 번거로운 파일 전송 문제를 <strong>로그인 없이</strong> 세션 코드로 즉시 해결해 주는 일회성 공유 서비스입니다. 특히 공용 PC에서도 계정 유출 걱정 없이 사용할 수 있으며, 모든 파일은 5분 후 영구적으로 자동 삭제됩니다.
 
 🌐 <strong>공식 웹사이트</strong>: [Drop5.net](https://drop5.net)
