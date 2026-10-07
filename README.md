@@ -15,6 +15,8 @@ The browser UI uses the same `/<session>/join`, `/files`, `/upload`, `/approve`,
 
 The UI locale is negotiated once from `Accept-Language` by the Worker, and the browser loads only the selected locale JSON plus English as the per-key fallback. The same locale is used for structured API errors.
 
+`SESSION_TTL_SECONDS` controls the sliding idle lifetime of a fileless session (default: 300 seconds). Session activity refreshes that deadline, file deadlines are never shortened by it, and the Durable Object alarm removes all persisted session state when the session is abandoned or its final file expires.
+
 Run the complete local gate before shipping Cloudflare changes:
 
 ```sh

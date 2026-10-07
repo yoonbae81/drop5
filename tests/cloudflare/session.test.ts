@@ -206,6 +206,66 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect((await json(await request(`/${code}/files?clientId=${hostId}`))).files).toHaveLength(1);
   });
+
+  it('deletes all Durable Object storage when the final file expires', async () => {
+    const sessionCode = 'final-file-expiry';
+    const sessionHost = 'final-file-host';
+    await json(await request(`/${sessionCode}/join`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clientId: sessionHost }),
+    }));
+    const form = new FormData();
+    form.append('content', new File(['ephemeral'], 'ephemeral.txt'));
+    const uploaded = await json(await request(`/${sessionCode}/upload`, { method: 'POST', body: form }));
+    const stub = env.SESSIONS.get(env.SESSIONS.idFromName(sessionCode));
+    let objectKey = '';
+
+    await runInDurableObject(stub, async (instance: Session, state) => {
+      const stored = await state.storage.get<any>('state');
+      const file = stored.files.find((item: any) => item.id === uploaded.files[0].id);
+      file.expiresAt = Date.now() - 1;
+      stored.expiresAt = Date.now() + 60_000;
+      objectKey = file.objectKey;
+      await state.storage.put('state', stored);
+      (instance as any).data = stored;
+      await state.storage.setAlarm(Date.now() + 1_000);
+    });
+
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await env.FILES.get(objectKey)).toBeNull();
+    await runInDurableObject(stub, async (_instance: Session, state) => {
+      expect((await state.storage.list()).size).toBe(0);
+      expect(await state.storage.getAlarm()).toBeNull();
+    });
+  });
+
+  it('deletes an abandoned fileless session when its session alarm expires', async () => {
+    const sessionCode = 'abandoned-session';
+    const sessionHost = 'abandoned-host';
+    await json(await request(`/${sessionCode}/join`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clientId: sessionHost }),
+    }));
+    const stub = env.SESSIONS.get(env.SESSIONS.idFromName(sessionCode));
+
+    await runInDurableObject(stub, async (instance: Session, state) => {
+      const stored = await state.storage.get<any>('state');
+      expect(stored.files).toHaveLength(0);
+      expect(stored.expiresAt).toBeGreaterThan(Date.now());
+      stored.expiresAt = Date.now() - 1;
+      await state.storage.put('state', stored);
+      (instance as any).data = stored;
+      await state.storage.setAlarm(Date.now() + 1_000);
+    });
+
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    await runInDurableObject(stub, async (_instance: Session, state) => {
+      expect((await state.storage.list()).size).toBe(0);
+      expect(await state.storage.getAlarm()).toBeNull();
+    });
+  });
 });
 
 describe('security boundary', () => {

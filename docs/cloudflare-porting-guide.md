@@ -226,9 +226,11 @@ session
     └─ expiresAt
 ```
 
+파일이 없는 세션은 `SESSION_TTL_SECONDS`(기본 300초)의 sliding idle TTL을 사용한다. 유효한 세션 활동은 세션 `expiresAt`을 연장하되 파일의 `expiresAt`을 앞당기지 않는다. 파일과 세션 만료는 하나의 Durable Object alarm으로 함께 예약하며, 마지막 파일이 만료되거나 방치된 빈 세션의 `expiresAt`이 지나면 R2 객체를 정리하고 Durable Object storage의 `deleteAll()`과 `deleteAlarm()`을 실행한다.
+
 중요한 상태는 JavaScript memory에만 저장하지 않는다.
 
-Durable Object는 hibernation 또는 restart 후 constructor가 다시 실행될 수 있으므로 필요한 상태는 SQLite-backed Durable Object storage에 저장한다. :chatgpt-content-reference{index="0"}
+Durable Object는 hibernation 또는 restart 후 constructor가 다시 실행될 수 있으므로 필요한 상태는 SQLite-backed Durable Object storage에 저장한다.
 
 ---
 
@@ -238,7 +240,7 @@ Durable Object는 hibernation 또는 restart 후 constructor가 다시 실행될
 
 이 방식은 Workers Free에서도 사용 가능하다.
 
-현재 Free plan에서는 account당 Durable Object storage 5GB, Durable Object 하나당 최대 10GB이며 Drop5의 session metadata 용도로는 충분하다. :chatgpt-content-reference{index="1"}
+현재 Free plan에서는 account당 Durable Object storage 5GB, Durable Object 하나당 최대 10GB이며 Drop5의 session metadata 용도로는 충분하다.
 
 단:
 
@@ -345,7 +347,7 @@ R2
 
 방식을 사용한다.
 
-Cloudflare Free/Pro의 HTTP request body limit는 현재 100MB이므로 파일당 30MB 제한은 여유 있게 들어온다. :chatgpt-content-reference{index="2"}
+Cloudflare Free/Pro의 HTTP request body limit는 현재 100MB이므로 파일당 30MB 제한은 여유 있게 들어온다.
 
 단, Worker memory에 파일 전체를 `ArrayBuffer` 등으로 적재하는 구현은 피한다.
 
@@ -378,9 +380,9 @@ Browser
  ─────────→ R2
 ```
 
-R2는 presigned PUT URL을 지원하며 URL 유효기간을 제한할 수 있다. :chatgpt-content-reference{index="3"}
+R2는 presigned PUT URL을 지원하며 URL 유효기간을 제한할 수 있다.
 
-더 큰 파일은 multipart upload를 사용한다. R2는 single PUT 5GiB, multipart는 최대 약 5TiB를 지원한다. :chatgpt-content-reference{index="4"}
+더 큰 파일은 multipart upload를 사용한다. R2는 single PUT 5GiB, multipart는 최대 약 5TiB를 지원한다.
 
 하지만 현재 30MB 요구사항에서는 처음부터 presigned/multipart 구조를 도입하지 않는다.
 
@@ -411,13 +413,13 @@ expiresAt = now + 300 seconds
 
 Durable Object가 alarm을 등록한다.
 
-Cloudflare Durable Object Alarm은 scheduled time에 Object를 깨울 수 있으며 실패 시 자동 retry되는 at-least-once 실행 방식이다. :chatgpt-content-reference{index="5"}
+Cloudflare Durable Object Alarm은 scheduled time에 Object를 깨울 수 있으며 실패 시 자동 retry되는 at-least-once 실행 방식이다.
 
 ---
 
 # 12. Alarm은 파일마다 하나씩 만들 수 없다는 점에 주의
 
-하나의 Durable Object는 동시에 alarm 하나만 설정할 수 있다. :chatgpt-content-reference{index="6"}
+하나의 Durable Object는 동시에 alarm 하나만 설정할 수 있다.
 
 따라서 다음처럼 구현하면 안 된다.
 
@@ -533,7 +535,7 @@ HTTP polling은 기본 실시간 mechanism에서 제거한다.
 
 일반 WebSocket API보다 Durable Objects의 WebSocket Hibernation API를 사용한다.
 
-Cloudflare 역시 Durable Objects WebSocket 서버에서는 Hibernation API 사용을 권장한다. 연결을 유지한 상태로 Durable Object가 memory에서 내려갈 수 있어 idle duration 비용을 줄일 수 있다. :chatgpt-content-reference{index="7"}
+Cloudflare 역시 Durable Objects WebSocket 서버에서는 Hibernation API 사용을 권장한다. 연결을 유지한 상태로 Durable Object가 memory에서 내려갈 수 있어 idle duration 비용을 줄일 수 있다.
 
 따라서:
 

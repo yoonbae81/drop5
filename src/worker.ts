@@ -17,6 +17,7 @@ export interface Env {
   MAX_STORAGE_SIZE?: string;
   MAX_FILES?: string;
   FILE_TTL_SECONDS?: string;
+  SESSION_TTL_SECONDS?: string;
 }
 
 const CODE_RE = /^[A-Za-z0-9_-]{3,128}$/;
