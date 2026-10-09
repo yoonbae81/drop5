@@ -18,6 +18,7 @@ export interface Env {
   MAX_FILES?: string;
   FILE_TTL_SECONDS?: string;
   SESSION_TTL_SECONDS?: string;
+  BASE_PATH?: string;
 }
 
 const CODE_RE = /^[A-Za-z0-9_-]{3,128}$/;
@@ -241,15 +242,43 @@ async function upload(request: Request, env: Env, code: string): Promise<Respons
   }
 }
 
-async function route(request: Request, env: Env): Promise<Response> {
+function basePath(env: Env): string {
+  const raw = (env.BASE_PATH ?? '').trim();
+  if (!raw || raw === '/') return '';
+  return '/' + raw.replace(/^\/+|\/+$/g, '');
+}
+
+function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const path = url.pathname;
+  const base = basePath(env);
+  let path = url.pathname;
+  if (base) {
+    if (path === base || path === base + '/') {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+      return Promise.resolve(Response.redirect(new URL(`${base}/${code}`, url), 302));
+    }
+    if (path.startsWith(base + '/')) path = path.slice(base.length);
+    else return Promise.resolve(failure(request, env, 404, 'connection_refused', 'Not found'));
+  }
+  return routeSession(request, env, url, path);
+}
+
+function isAssetPath(path: string): boolean {
+  return path === '/favicon.ico' || path === '/style.css' || path === '/app.js' || localeAsset(path);
+}
+
+async function routeSession(request: Request, env: Env, url: URL, path: string): Promise<Response> {
   if (path === '/' || path === '') {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
     return Response.redirect(new URL(`/${code}`, url), 302);
   }
-  if (path === '/favicon.ico' || path === '/style.css' || path === '/app.js' || localeAsset(path)) return env.ASSETS.fetch(request);
+  if (isAssetPath(path)) return env.ASSETS.fetch(new Request(new URL(path, url), request));
+  // The browser resolves page-relative asset URLs against the session page,
+  // so /<code>/style.css and /<code>/locales/ko.json also mean the assets.
+  const relativeAsset = /^\/[A-Za-z0-9_-]{3,128}(\/(?:style\.css|app\.js|favicon\.ico|locales\/[A-Za-z-]+\.json))$/.exec(path);
+  if (relativeAsset) return env.ASSETS.fetch(new Request(new URL(relativeAsset[1], url), request));
   const code = sessionCode(path);
   if (!code) return failure(request, env, 400, 'connection_refused', 'Invalid session code');
   const stub = sessionStub(env, code);

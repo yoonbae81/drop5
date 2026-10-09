@@ -11,7 +11,7 @@ import worker, { type Env } from '../../src/worker';
 const origin = 'https://drop5.test';
 
 function request(path: string, init?: RequestInit, testEnv: Env = env): Promise<Response> {
-  return worker.fetch(new Request(`${origin}${path}`, init), testEnv);
+  return worker.fetch(new Request(`${origin}${path}`, init), { ...testEnv, BASE_PATH: '' });
 }
 
 afterEach(async () => {
@@ -71,9 +71,7 @@ describe('Cloudflare i18n', () => {
 
   it('returns a localized per-file 413 response with interpolation metadata', async () => {
     const oneMiB = 1024 * 1024;
-    const testEnv = Object.assign(Object.create(env) as Env, {
-      MAX_FILE_SIZE: String(oneMiB),
-    });
+    const testEnv = { ...env, MAX_FILE_SIZE: String(oneMiB), BASE_PATH: '' };
     const form = new FormData();
     form.append('content', new File([new Uint8Array(oneMiB + 1)], '큰-하나.txt'));
     form.append('content', new File([new Uint8Array(oneMiB + 2)], '큰-둘.txt'));

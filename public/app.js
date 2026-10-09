@@ -1,7 +1,7 @@
 (async () => {
   const locale = document.documentElement.lang || 'en';
   async function loadLocale(code) {
-    const response = await fetch(`/locales/${encodeURIComponent(code)}.json`, { cache: 'force-cache' });
+    const response = await fetch(`./locales/${encodeURIComponent(code)}.json`, { cache: 'force-cache' });
     if (!response.ok) throw new Error(`Locale ${code} returned ${response.status}`);
     return response.json();
   }
@@ -41,8 +41,12 @@
     return data.error || `Request failed (${status})`;
   }
 
-  const code = location.pathname.split('/').filter(Boolean)[0] || '';
-  const api = `/${encodeURIComponent(code)}`;
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  // The last path segment is always the session code; everything before it is
+  // the deployment base path (e.g. /drop5/<code> -> base=/drop5, code=<code>).
+  const code = pathParts[pathParts.length - 1] || '';
+  const base = pathParts.length > 1 ? '/' + pathParts.slice(0, -1).join('/') : '';
+  const api = `${base}/${encodeURIComponent(code)}`;
   const clientId = sessionStorage.getItem('drop5_client_id') || crypto.randomUUID();
   sessionStorage.setItem('drop5_client_id', clientId);
   const filesNode = document.querySelector('#files');

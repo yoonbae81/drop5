@@ -10,7 +10,9 @@ const hostId = 'host-12345678';
 const guestId = 'guest-12345678';
 
 function request(path: string, init?: RequestInit): Promise<Response> {
-  return worker.fetch(new Request(`${origin}${path}`, init), env);
+  // Tests exercise the no-base-path deployment; the /drop5 prefix path is
+  // covered separately in the base-path test below.
+  return worker.fetch(new Request(`${origin}${path}`, init), { ...env, BASE_PATH: '' });
 }
 
 async function json(response: Response): Promise<Record<string, any>> {
@@ -279,5 +281,48 @@ describe('security boundary', () => {
     expect(response.status).toBe(404);
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     expect(response.headers.get('content-security-policy')).toContain("default-src 'self'");
+  });
+});
+
+describe('base path', () => {
+  const baseRequest = (path: string, init?: RequestInit): Promise<Response> =>
+    worker.fetch(new Request(`${origin}${path}`, init), env);
+
+  it('redirects the base path to a session and serves session routes under it', async () => {
+    const redirect = await baseRequest('/drop5');
+    expect(redirect.status).toBe(302);
+    const location = new URL(redirect.headers.get('location')!);
+    expect(location.pathname).toMatch(/^\/drop5\/[A-Za-z0-9_-]{3,128}$/);
+
+    const code = location.pathname.split('/').pop()!;
+    const joinResponse = await baseRequest(`/drop5/${code}/join`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ clientId: hostId }),
+    });
+    expect(await json(joinResponse)).toMatchObject({ success: true, status: 'approved', host: true });
+  });
+
+  it('serves static assets under the base path and session-relative, rejects other prefixes', async () => {
+    // With BASE_PATH set, only paths under the base reach the session router.
+    const styleUnderBase = await baseRequest('/drop5/style.css');
+    expect(styleUnderBase.status).toBe(200);
+    const sessionRelative = await baseRequest('/drop5/test-session/app.js');
+    expect(sessionRelative.status).toBe(200);
+    const sessionLocale = await baseRequest('/drop5/test-session/locales/ko.json');
+    expect(sessionLocale.status).toBe(200);
+    expect((await baseRequest('/style.css')).status).toBe(404);
+    expect((await baseRequest('/unknown-prefix/test-session')).status).toBe(404);
+    // Same request under the configured base path reaches the session router.
+    const underBase = await baseRequest('/drop5/valid-code/unknown');
+    expect(underBase.status).toBe(404);
+  });
+
+  it('keeps root-mode behavior when BASE_PATH is empty', async () => {
+    const rootRequest = (path: string, init?: RequestInit): Promise<Response> =>
+      worker.fetch(new Request(`${origin}${path}`, init), { ...env, BASE_PATH: '' });
+    const redirect = await rootRequest('/');
+    expect(redirect.status).toBe(302);
+    expect(new URL(redirect.headers.get('location')!).pathname).toMatch(/^\/[A-Za-z0-9_-]{3,128}$/);
   });
 });
