@@ -471,11 +471,12 @@
       if (progressBar) progressBar.style.width = '100%';
       if (progressText) progressText.textContent = t('upload_complete');
       if (finalData.success) {
+        // Hide the progress overlay first: syncFiles() skips while it is
+        // visible, so awaiting it before this would be a no-op and the new
+        // file would only appear on the next 4s polling tick.
+        if (progressOverlay) progressOverlay.style.display = 'none';
+        isUploading = false;
         await syncFiles();
-        setTimeout(() => {
-          if (progressOverlay) progressOverlay.style.display = 'none';
-          isUploading = false;
-        }, 600);
       } else {
         throw new Error(apiError(finalData, 200));
       }
