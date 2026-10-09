@@ -111,7 +111,7 @@ function localeAsset(path: string): boolean {
   return !!match && SUPPORTED_LOCALE_SET.has(match[1]);
 }
 
-async function indexResponse(request: Request, env: Env): Promise<Response> {
+async function indexResponse(request: Request, env: Env, sessionCode: string): Promise<Response> {
   const { locale, translations } = await requestTranslations(request, env.ASSETS);
   const url = new URL(request.url);
   const asset = await env.ASSETS.fetch(new Request(new URL('/', url), request));
@@ -147,6 +147,9 @@ async function indexResponse(request: Request, env: Env): Promise<Response> {
     })
     .on('#dropZone', {
       element(element) { element.setAttribute('data-max-file-bytes', String(maxFile)); },
+    })
+    .on('#sessionCode', {
+      element(element) { element.append(`${sessionCode} 🔗`); },
     })
     .transform(asset);
   const headers = new Headers(localized.headers);
@@ -303,13 +306,13 @@ async function routeSession(request: Request, env: Env, url: URL, path: string):
   const parts = path.split('/').filter(Boolean);
   if (parts.length === 1 && request.method === 'GET') {
     await command(stub, 'touch');
-    return indexResponse(request, env);
+    return indexResponse(request, env, code);
   }
   const action = parts[1];
   if (action === 'join' && request.method === 'POST') {
     const data = await request.json().catch(() => ({})) as Record<string, unknown>;
     if (typeof data.clientId !== 'string' || !CLIENT_RE.test(data.clientId)) return failure(request, env, 400, 'device_approval_required', 'Invalid client ID');
-    return commandResponse(await command(stub, 'join', { clientId: data.clientId, userAgent: request.headers.get('user-agent') ?? '' }), request, env);
+    return commandResponse(await command(stub, 'join', { clientId: data.clientId, userAgent: request.headers.get('user-agent') ?? '', ip: request.headers.get('cf-connecting-ip') ?? 'unknown' }), request, env);
   }
   if (action === 'heartbeat' && request.method === 'POST') {
     const data = await request.json().catch(() => ({})) as Record<string, unknown>;

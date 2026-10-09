@@ -1,38 +1,149 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="referrer" content="no-referrer">
-  <title>Drop5</title>
-  <link rel="icon" href="favicon.ico">
-  <link rel="stylesheet" href="style.css">
-  <style>
-    .cloudflare-shell{max-width:1100px;margin:8vh auto;padding:24px}.cf-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}.cf-code{font:600 1.25rem monospace;cursor:pointer}.cf-upload{padding:48px 20px;text-align:center;border:2px dashed var(--text-secondary);border-radius:18px;cursor:pointer}.cf-upload.drag{border-color:#42a5f5;background:#42a5f51a}.cf-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:20px}.cf-file{padding:16px;border-radius:12px;background:var(--surface,#ffffff14);color:inherit;text-decoration:none;overflow-wrap:anywhere}.cf-file small{display:block;opacity:.7;margin-top:8px}.cf-status{min-height:1.5em;margin:12px 0}.cf-pending{display:none;padding:12px;background:#f0a50022;border-radius:10px}.cf-pending button{margin-left:8px}.cf-empty{opacity:.7;text-align:center;padding:24px}.cf-actions{display:flex;gap:8px;align-items:center}.cf-text{width:100%;min-height:100px;margin-top:12px}.cf-delete{margin-top:16px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="color-scheme" content="light dark">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Drop5</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="style.css">
+    <script>
+        (function () {
+            const getCookie = (name) => {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            };
+            const savedTheme = getCookie('theme');
+            if (savedTheme) {
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            } else {
+                const hour = new Date().getHours();
+                const isNight = hour >= 20 || hour < 7;
+                document.documentElement.setAttribute('data-theme', isNight ? 'dark' : 'light');
+            }
+        })();
+    </script>
 </head>
+
 <body>
-  <main class="cloudflare-shell">
-    <header class="cf-heading">
-      <h1>Drop5</h1>
-      <button class="cf-code" id="shareCode" type="button" data-i18n-title="copy_link"></button>
-    </header>
-    <section id="dropZone" class="cf-upload" tabindex="0" role="button"
-      data-max-file-bytes="__MAX_FILE_SIZE__" data-i18n-aria-label="upload_text">
-      <strong data-i18n="upload_text">Upload Files</strong><br>
-      <small data-i18n="text_input">Enter text directly</small>
-      <input id="fileInput" type="file" multiple hidden>
-    </section>
-    <textarea id="textInput" class="cf-text" data-i18n-placeholder="upload_hint" placeholder="Enter the content you want to send."></textarea>
-    <div class="cf-actions">
-      <button id="sendText" data-i18n="upload_text">Upload Files</button>
-      <button id="deleteAll" class="cf-delete" data-i18n="delete_all_files">Delete all files</button>
+    <!-- Waiting Overlay (Initially Hidden) -->
+    <div id="waitingOverlay" class="waiting-overlay" style="display: none;">
+        <div class="waiting-icon">🔒</div>
+        <div class="waiting-title" data-i18n="waiting_host_approval"></div>
+        <div class="waiting-desc" data-i18n="waiting_approval_desc"></div>
     </div>
-    <div id="status" class="cf-status" role="status"></div>
-    <section id="pending" class="cf-pending"></section>
-    <section id="files" class="cf-files"><p class="cf-empty" data-i18n="no_files_yet">No files yet</p></section>
-  </main>
-  <script src="app.js" defer></script>
+
+    <!-- Approval Modal (Initially Hidden) -->
+    <div id="approvalModal" class="approval-modal">
+        <div class="approval-header">
+            <span>📱</span> <span data-i18n="new_device_request"></span>
+        </div>
+        <div style="color: var(--text-secondary); font-size: 0.9rem;" data-i18n="new_device_confirm"></div>
+        <div id="approvalDeviceInfo"
+            style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8; text-align: center; margin-top: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        </div>
+        <div class="approval-actions">
+            <button class="btn-reject" data-i18n="reject"></button>
+            <button class="btn-approve" data-i18n="approve"></button>
+        </div>
+    </div>
+
+    <div class="header">
+        <div class="brand">Drop5</div>
+        <div class="header-right">
+            <div class="session-code" id="sessionCode" data-i18n-title="copy_link"
+                tabindex="0" role="button">
+            </div>
+            <div class="header-actions">
+                <button class="header-icon-btn" id="langToggle" data-i18n-title="lang_toggle">
+                    <span>🌐</span>
+                </button>
+                <a href="https://github.com/yoonbae81/drop5" class="header-icon-btn github-link" target="_blank"
+                    rel="noopener noreferrer" title="GitHub">
+                    <svg height="24" width="24" viewBox="0 0 16 16" fill="currentColor">
+                        <path
+                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
+                        </path>
+                    </svg>
+                </a>
+                <button class="header-icon-btn" id="themeToggle" data-i18n-title="theme_toggle">
+                    <span id="themeIcon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- Upload Zone (30%) -->
+        <div class="upload-section">
+            <div class="drop-zone" id="dropZone" tabindex="0" role="button" data-i18n-aria-label="upload_text">
+                <div class="upload-icon">☁️</div>
+                <div class="upload-text" data-i18n="upload_text"></div>
+                <input type="file" id="fileInput" multiple style="display: none">
+                <button class="text-input-btn" id="textInputBtn" data-i18n-title="text_input"> 📝
+                </button>
+            </div>
+
+            <div class="progress-overlay" id="progressOverlay">
+                <div class="spinner"></div>
+                <div id="progressText" style="margin-top:1rem;font-weight:600;color:var(--text-primary)"
+                    data-i18n="uploading"></div>
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File List (70%) -->
+        <div class="file-list-section">
+            <button class="delete-all-btn" id="deleteAllBtn" data-i18n-title="delete_all_files">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
+            <div id="fileListContent">
+                <div id="fileItems">
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div class="upload-text" data-i18n="no_files_yet"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-container mobile-footer" id="footerBlockMobile">
+                <span class="disclaimer" data-i18n="disclaimer"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer-container desktop-footer" id="footerBlockDesktop">
+        <span class="disclaimer" data-i18n="disclaimer"></span>
+    </div>
+
+    <div class="toast" id="toast" data-i18n="link_copied"></div>
+
+    <div class="modal-overlay" id="textModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">📝 <span data-i18n="text_input_modal_title"></span></div>
+                <button class="close-modal" id="closeTextModal">&times;</button>
+            </div>
+            <textarea id="textInputTextArea" class="text-textarea"
+                data-i18n-placeholder="upload_hint"></textarea>
+            <button class="save-text-btn" id="saveTextBtn" data-i18n="upload_text"></button>
+        </div>
+    </div>
+
+    <script src="app.js" defer></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # Drop5 — Ephemeral File Sharing Service
 
-> **Cloudflare port status:** the Workers implementation is functionally complete and validated locally. The Python deployment remains the production service until the separately approved Cloudflare resource setup and traffic switchover are performed.
+> **Cloudflare port status:** the Workers implementation is **deployed and live at [xcv.kr/drop5](https://xcv.kr/drop5)** (version `cc3f7540`). The Python deployment remains available for rollback until the rollback window closes. `drop5.net` is retired; a redirect to `xcv.kr/drop5` may be added separately.
 
 ## Cloudflare development
 
@@ -13,9 +13,24 @@ npm run dev
 
 The browser UI uses the same `/<session>/join`, `/files`, `/upload`, `/approve`, `/delete_all`, and `/download/<name>` API shape. iOS Shortcut uploads remain supported without a browser client ID. No Cloudflare account resources are created or deployed by this repository setup.
 
+### Base path deployment
+
+The Worker supports a deployment prefix via the `BASE_PATH` environment variable (current production: `/drop5`, served at `xcv.kr/drop5`). With `BASE_PATH` set, only paths under the prefix are served; session codes are appended below it (`/drop5/<session-code>`). Clearing `BASE_PATH` restores root-mode routing (`/<session-code>`), so moving to a different domain or path requires only that one variable change. The browser client derives the API base from `location.pathname`, so no client-side configuration is needed.
+
 The UI locale is negotiated once from `Accept-Language` by the Worker, and the browser loads only the selected locale JSON plus English as the per-key fallback. The same locale is used for structured API errors.
 
 `SESSION_TTL_SECONDS` controls the sliding idle lifetime of a fileless session (default: 300 seconds). Session activity refreshes that deadline, file deadlines are never shortened by it, and the Durable Object alarm removes all persisted session state when the session is abandoned or its final file expires.
+
+### Rate limiting
+
+Production enforces two Worker-level rate limit bindings (see `ratelimits` in `wrangler.jsonc`):
+
+| Route | Limit | Key |
+|-------|-------|-----|
+| Session creation (`/` or `BASE_PATH`) | 10 requests / 60 s | client IP |
+| Uploads (`/<session>/upload`) | 20 requests / 60 s | session + client ID |
+
+Both return HTTP 429 when exceeded and **fail open** if the limiter is unavailable. iOS Shortcut uploads without a client ID are aggregated under an `anonymous` key.
 
 Run the complete local gate before shipping Cloudflare changes:
 
@@ -27,25 +42,30 @@ It performs the TypeScript check, Workers-runtime Vitest suite (including i18n, 
 
 ## Cloudflare switchover
 
-The R2 bucket must remain private. The Durable Object alarm is the authoritative five-minute TTL; a one-day R2 lifecycle rule is only an orphan-object safety net. During the approved production setup, add and verify the rule with:
+The R2 bucket (`drop5-files`) is provisioned and private. The Durable Object alarm is the authoritative five-minute TTL; an R2 lifecycle rule expiring objects and incomplete multipart uploads after 10 minutes is only an orphan-object safety net (R2 sweeps periodically, so deletion can lag slightly; the free tier covers transient orphans). Inspect the rule with:
 
 ```sh
-npx wrangler r2 bucket lifecycle add drop5-files expire-orphans-after-one-day "" --expire-days 1
 npx wrangler r2 bucket lifecycle list drop5-files
 ```
 
-These commands mutate the configured Cloudflare account and are **not** part of local setup or validation. Configure Cloudflare WAF/rate limits before routing production traffic. See [the switchover runbook](docs/cloudflare-switchover.md) and [the architecture/porting guide](docs/cloudflare-porting-guide.md).
+The production rule lives in `scripts/r2-lifecycle.json` and can be reapplied with:
+
+```sh
+npx wrangler r2 bucket lifecycle set drop5-files --file scripts/r2-lifecycle.json
+```
+
+These commands mutate the configured Cloudflare account and are **not** part of local setup or validation. Traffic routes to the Worker via the `xcv.kr/drop5*` Workers Route. See [the switchover runbook](docs/cloudflare-switchover.md) and [the architecture/porting guide](docs/cloudflare-porting-guide.md).
 
 <strong>Drop5</strong>는 <strong>OS가 서로 다른 개인 기기 간</strong>의 번거로운 파일 전송 문제를 <strong>로그인 없이</strong> 세션 코드로 즉시 해결해 주는 일회성 공유 서비스입니다. 특히 공용 PC에서도 계정 유출 걱정 없이 사용할 수 있으며, 모든 파일은 5분 후 영구적으로 자동 삭제됩니다.
 
-🌐 <strong>공식 웹사이트</strong>: [Drop5.net](https://drop5.net)
+🌐 <strong>공식 웹사이트</strong>: [xcv.kr/drop5](https://xcv.kr/drop5)
 
 ---
 
 ## 📖 사용 방법
 
 1. <strong>파일공유 세션 시작</strong>
-   - 브라우저에서 서버 주소(예: `https://drop5.net`)로 접속하면 세션 코드가 포함된 페이지로 자동 이동합니다.
+   - 브라우저에서 서버 주소(예: `https://xcv.kr/drop5`)로 접속하면 세션 코드가 포함된 페이지로 자동 이동합니다.
    - 세션 코드를 아는 사람이 세션에 접근할 수 있으므로 운영 환경에서는 짧은 코드보다 충분히 긴 랜덤 코드를 사용합니다.
 2. <strong>파일 업로드</strong>
    - 화면 좌측의 <strong>구름 아이콘(☁️)</strong> 영역으로 파일을 드래그 앤 드롭하거나 영역을 클릭하여 선택합니다.
@@ -68,7 +88,7 @@ iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 �
    - Import Question이 설정된 값은 Shortcut 공유 시 제거되고, 설치하는 사람이 자신의 세션코드를 입력합니다.
 4. <strong>변수 설정(Set Variable)</strong> 액션을 추가하고 Text 액션의 결과를 `Session Code`로 지정합니다.
 5. <strong>텍스트(Text)</strong> 액션으로 다음 URL을 조합하고 `URL` 변수로 지정합니다.
-   - `https://drop5.net/`
+   - `https://xcv.kr/drop5/`
    - `Session Code` 변수
    - `/upload`
 6. <strong>유형 가져오기(Get Type)</strong> 액션을 추가합니다.
@@ -94,10 +114,10 @@ iPhone의 공유 시트에서 파일 또는 텍스트를 Drop5로 업로드할 �
 최종 요청 URL의 형식은 다음과 같습니다.
 
 ```text
-POST https://drop5.net/<session-code>/upload
+POST https://xcv.kr/drop5/<session-code>/upload
 ```
 
-`/upload/<session-code>`가 아니라 기존 Drop5 경로 구조인 `/<session-code>/upload`를 사용합니다. 서버는 JSON의 `content`를 텍스트로, Form의 `content`를 파일로 처리하고 Form의 `name`을 파일명으로 사용합니다. 세션 코드가 새 코드여도 세션을 만들며, 호스트 승인을 기다리지 않고 파일을 저장합니다.
+`/upload/<session-code>`가 아니라 기존 Drop5 경로 구조인 `/<session-code>/upload`를 사용합니다(프로덕션에서는 `/drop5` 프리픽스 뒤에 붙습니다). 서버는 JSON의 `content`를 텍스트로, Form의 `content`를 파일로 처리하고 Form의 `name`을 파일명으로 사용합니다. 세션 코드가 새 코드여도 세션을 만들며, 호스트 승인을 기다리지 않고 파일을 저장합니다.
 
 ---
 
@@ -143,7 +163,17 @@ POST https://drop5.net/<session-code>/upload
 
 ## 🛠 설치 및 실행
 
-### 1. 환경 설정 및 실행
+### Cloudflare Workers (현재 프로덕션)
+
+```bash
+git clone https://github.com/yoonbae81/drop5.git
+cd drop5
+npm ci
+npm run validate:cloudflare   # typecheck + vitest + wrangler dry-run
+npm run deploy                # 배포 (wrangler 로그인 필요)
+```
+
+### 1. 환경 설정 및 실행 (Python 레거시, 롤백용)
 가상 환경 설정부터 실행까지 자동화된 스크립트를 제공합니다.
 ```bash
 git clone https://github.com/yoonbae81/drop5.git

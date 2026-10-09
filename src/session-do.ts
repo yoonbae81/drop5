@@ -11,7 +11,7 @@ interface StoredFile {
   reservation?: boolean;
   reservationExpiresAt?: number;
 }
-interface Client { status: 'approved' | 'pending' | 'rejected'; joinedAt: number; lastSeen: number; userAgent: string }
+interface Client { status: 'approved' | 'pending' | 'rejected'; joinedAt: number; lastSeen: number; userAgent: string; ip?: string }
 interface State { createdAt: number; expiresAt: number; clients: Record<string, Client>; hostId: string | null; files: StoredFile[] }
 interface Env { FILES: R2Bucket; SESSION_TTL_SECONDS?: string }
 
@@ -67,14 +67,15 @@ export class Session extends DurableObject<Env> {
       }
       case 'join': {
         const id = input.clientId as string;
+        const clientIp = input.ip as string | undefined;
         if (!state.clients[id]) {
           const hasApproved = Object.values(state.clients).some(client => client.status === 'approved');
           const status = !state.hostId || !hasApproved ? 'approved' : 'pending';
-          state.clients[id] = { status, joinedAt: now, lastSeen: now, userAgent: String(input.userAgent ?? '').slice(0, 300) };
+          state.clients[id] = { status, joinedAt: now, lastSeen: now, userAgent: String(input.userAgent ?? '').slice(0, 300), ip: clientIp };
           if (!state.hostId && status === 'approved') state.hostId = id;
           await this.save();
-          if (status === 'pending') this.broadcast({ type: 'client-joined', client: { clientId: id, joinedAt: now, userAgent: state.clients[id].userAgent } });
-        } else state.clients[id].lastSeen = now;
+          if (status === 'pending') this.broadcast({ type: 'client-joined', client: { clientId: id, joinedAt: now, ip: clientIp ?? 'Unknown', userAgent: state.clients[id].userAgent } });
+        } else { state.clients[id].lastSeen = now; if (clientIp) state.clients[id].ip = clientIp; }
         this.refreshSession(state, now);
         await this.save(); await this.scheduleAlarm();
         return this.response({ success: true, status: state.clients[id].status, host: state.hostId === id, pending_requests: this.pending(state) });
@@ -187,7 +188,7 @@ export class Session extends DurableObject<Env> {
   }
 
   private pending(state: State) {
-    return Object.entries(state.clients).filter(([, client]) => client.status === 'pending').map(([clientId, client]) => ({ clientId, joined_at: client.joinedAt, browser: client.userAgent }));
+    return Object.entries(state.clients).filter(([, client]) => client.status === 'pending').map(([clientId, client]) => ({ clientId, joined_at: client.joinedAt, ip: client.ip ?? 'Unknown', browser: client.userAgent }));
   }
   private sessionTtlMs(): number {
     const seconds = Number(this.env.SESSION_TTL_SECONDS ?? 300);

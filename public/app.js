@@ -1,7 +1,18 @@
 (async () => {
+  // Session state
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  // The last path segment is always the session code; everything before it is
+  // the deployment base path (e.g. /drop5/<code> -> base=/drop5, code=<code>).
+  const SESSION_CODE = pathParts[pathParts.length - 1] || '';
+  const BASE_URL = pathParts.length > 1 ? '/' + pathParts.slice(0, -1).join('/') : '';
+  const apiUrl = () => {
+    const currentPath = location.pathname.replace(/\/+$/, '');
+    return `${currentPath}`;
+  };
+
   const locale = document.documentElement.lang || 'en';
   async function loadLocale(code) {
-    const response = await fetch(`./locales/${encodeURIComponent(code)}.json`, { cache: 'force-cache' });
+    const response = await fetch(`${BASE_URL}/locales/${encodeURIComponent(code)}.json`, { cache: 'force-cache' });
     if (!response.ok) throw new Error(`Locale ${code} returned ${response.status}`);
     return response.json();
   }
@@ -10,24 +21,47 @@
     englishPromise,
     locale === 'en' ? Promise.resolve({}) : loadLocale(locale).catch(() => ({})),
   ]);
-  const translations = { ...english, ...selected };
+  const TRANSLATIONS = { ...english, ...selected };
   const interpolate = (template, params = {}) => String(template).replace(
     /\{\{([A-Za-z0-9_]+)\}\}|\{([A-Za-z0-9_]+)\}/g,
     (token, doubleKey, singleKey) => Object.hasOwn(params, doubleKey || singleKey)
       ? String(params[doubleKey || singleKey])
       : token,
   );
-  const t = (key, params = {}) => interpolate(translations[key] || key, params);
+  const t = (key, params = {}) => interpolate(TRANSLATIONS[key] || key, params);
   document.querySelectorAll('[data-i18n]').forEach(node => {
-    const translated = translations[node.dataset.i18n];
-    if (translated) node.textContent = translated;
+    const translated = TRANSLATIONS[node.dataset.i18n];
+    if (translated) node.innerHTML = translated;
   });
   for (const attribute of ['title', 'placeholder', 'aria-label']) {
     document.querySelectorAll(`[data-i18n-${attribute}]`).forEach(node => {
       const key = node.getAttribute(`data-i18n-${attribute}`);
-      if (translations[key]) node.setAttribute(attribute, translations[key]);
+      if (TRANSLATIONS[key]) node.setAttribute(attribute, TRANSLATIONS[key]);
     });
   }
+
+  let CLIENT_ID = sessionStorage.getItem('drop5_client_id');
+  if (!CLIENT_ID) {
+    CLIENT_ID = crypto.randomUUID();
+    sessionStorage.setItem('drop5_client_id', CLIENT_ID);
+  }
+
+  let isApproved = false;
+  let pendingRequests = [];
+  let pollingInterval = null;
+  let lastSyncHash = '';
+  let isUploading = false;
+
+  // DOM elements
+  const dropZone = document.getElementById('dropZone');
+  const progressOverlay = document.getElementById('progressOverlay');
+  const toast = document.getElementById('toast');
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  const fileInput = document.getElementById('fileInput');
+  const progressBar = document.getElementById('progressBar');
+  const progressContainer = document.getElementById('progressContainer');
+  const progressText = document.getElementById('progressText');
 
   function apiError(data, status) {
     if (data.errorKey === 'file_too_large_with_max' && Array.isArray(data.files)) {
@@ -41,98 +75,386 @@
     return data.error || `Request failed (${status})`;
   }
 
-  const pathParts = location.pathname.split('/').filter(Boolean);
-  // The last path segment is always the session code; everything before it is
-  // the deployment base path (e.g. /drop5/<code> -> base=/drop5, code=<code>).
-  const code = pathParts[pathParts.length - 1] || '';
-  const base = pathParts.length > 1 ? '/' + pathParts.slice(0, -1).join('/') : '';
-  const api = `${base}/${encodeURIComponent(code)}`;
-  const clientId = sessionStorage.getItem('drop5_client_id') || crypto.randomUUID();
-  sessionStorage.setItem('drop5_client_id', clientId);
-  const filesNode = document.querySelector('#files');
-  const statusNode = document.querySelector('#status');
-  const pendingNode = document.querySelector('#pending');
-  const dropZone = document.querySelector('#dropZone');
-  const fileInput = document.querySelector('#fileInput');
-  const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  let approved = false;
-  let host = false;
-  let pending = [];
-  let currentFiles = [];
-  const clientQuery = `clientId=${encodeURIComponent(clientId)}`;
-  document.querySelector('#shareCode').textContent = `${code} 🔗`;
-  document.querySelector('#shareCode').onclick = async () => { await navigator.clipboard.writeText(location.href); statusNode.textContent = t('link_copied'); };
-
-  async function request(path, options = {}) {
-    const response = await fetch(`${api}/${path}`, { cache: 'no-store', ...options });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok && data.status !== 'pending') throw new Error(apiError(data, response.status));
-    return data;
+  // Theme management
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
   }
-  function renderPending() {
-    pendingNode.style.display = pending.length && host ? 'block' : 'none';
-    pendingNode.innerHTML = pending.map(item => `<span>${escape(t('new_device_request'))}</span><button data-id="${escape(item.clientId)}" data-decision="approve">${escape(t('approve'))}</button><button data-id="${escape(item.clientId)}" data-decision="reject">${escape(t('reject'))}</button>`).join('');
-    pendingNode.querySelectorAll('button').forEach(button => button.onclick = async () => {
-      try { await request('approve', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({clientId,targetId:button.dataset.id,decision:button.dataset.decision}) }); pending = pending.filter(item => item.clientId !== button.dataset.id); renderPending(); }
-      catch (error) { statusNode.textContent = error.message; }
+  function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+  }
+  function isNightTime() {
+    const hour = new Date().getHours();
+    return hour >= 20 || hour < 7;
+  }
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeIcon) themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    setCookie('theme', theme, 365);
+  }
+  function initTheme() {
+    const savedTheme = getCookie('theme');
+    setTheme(savedTheme || (isNightTime() ? 'dark' : 'light'));
+  }
+  function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  }
+  if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+
+  // Language toggle: switch cookie between current locale and English
+  const langToggle = document.getElementById('langToggle');
+  if (langToggle) {
+    langToggle.addEventListener('click', () => {
+      const target = locale === 'en' ? 'ko' : 'en';
+      setCookie('drop5_lang', target, 365);
+      location.reload();
     });
   }
-  function renderFiles() {
-    if (!approved) { filesNode.innerHTML = `<p class="cf-empty">${escape(t('waiting_host_approval'))}</p>`; return; }
-    if (!currentFiles.length) { filesNode.innerHTML = `<p class="cf-empty">${escape(t('no_files_yet'))}</p>`; return; }
-    filesNode.innerHTML = currentFiles.map(file => `<a class="cf-file" href="${api}/download/${encodeURIComponent(file.id)}?${clientQuery}">${escape(file.name)}<small>${(file.size / 1024).toFixed(1)} KB · <span data-expiry="${file.expiresAt}"></span></small></a>`).join('');
-    updateCountdowns();
+
+  function showToast(message) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => { toast.classList.remove('show'); }, 3000);
   }
-  async function refresh() {
-    const data = await request(`files?${clientQuery}`);
-    if (!data.success) { approved = false; renderFiles(); return; }
-    currentFiles = data.files; renderFiles();
+
+  function formatSize(sizeBytes) {
+    if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} kB`;
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
   }
-  async function join() {
-    const data = await request('join', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({clientId}) });
-    approved = data.status === 'approved'; host = data.host === true; pending = data.pending_requests || []; renderPending();
-    if (approved) await refresh(); else renderFiles();
-    connect();
+
+  function formatBrowserInfo(ua) {
+    if (!ua || ua === 'Unknown') return 'Unknown Browser';
+    let browser = 'Browser';
+    let os = 'OS';
+    if (ua.includes('Windows NT 10.')) os = 'Windows 10/11';
+    else if (ua.includes('Windows NT 6.1')) os = 'Windows 7';
+    else if (ua.includes('Macintosh')) os = 'macOS';
+    else if (ua.includes('iPhone')) os = 'iPhone';
+    else if (ua.includes('iPad')) os = 'iPad';
+    else if (ua.includes('Android')) os = 'Android';
+    else if (ua.includes('Linux')) os = 'Linux';
+    if (ua.includes('Edg/')) browser = 'Edge';
+    else if (ua.includes('Chrome/')) browser = 'Chrome';
+    else if (ua.includes('Firefox/')) browser = 'Firefox';
+    else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari';
+    return `${browser} on ${os}`;
   }
-  function connect() {
-    const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${scheme}//${location.host}${api}/ws?${clientQuery}`);
-    socket.onmessage = async event => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'client-joined' && host) { pending.push(message.client); renderPending(); }
-      if (message.type === 'client-approved' && message.clientId === clientId) { approved = true; statusNode.textContent = t('approve'); await refresh(); }
-      if (message.type === 'client-rejected' && message.clientId === clientId) { approved = false; renderFiles(); statusNode.textContent = t('host_refused_connection'); }
-      if (['file-uploaded','file-deleted','file-expired'].includes(message.type) && approved) await refresh();
-    };
-    socket.onclose = () => setTimeout(connect, 2000);
+
+  // Countdown timer - update display every second
+  function updateCountdownDisplay() {
+    document.querySelectorAll('.file-card[data-remaining]').forEach(card => {
+      let remaining = parseInt(card.dataset.remaining, 10);
+      if (Number.isNaN(remaining) || remaining <= 0) {
+        card.style.display = 'none';
+        return;
+      }
+      remaining--;
+      card.dataset.remaining = remaining;
+      const timerSpan = card.querySelector('.countdown-timer');
+      if (timerSpan) {
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        timerSpan.textContent = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+        const timeBadge = card.querySelector('.time-badge');
+        if (remaining < 60) timeBadge.classList.remove('safe');
+        else timeBadge.classList.add('safe');
+      }
+    });
   }
-  async function sendFiles(fileList) {
-    const files = Array.from(fileList);
-    const maxFileBytes = Number(dropZone.dataset.maxFileBytes);
-    const maxMb = Math.floor(maxFileBytes / (1024 * 1024));
-    const tooLarge = Number.isFinite(maxFileBytes) && maxFileBytes > 0
-      ? files.filter(file => file.size > maxFileBytes)
-      : [];
-    if (tooLarge.length) {
-      statusNode.textContent = tooLarge.map(file => t('file_too_large_with_max', {
-        filename: file.name,
-        max_mb: maxMb,
-      })).join('\n');
+
+  // --- Session management & polling ---
+
+  function updateSessionState(status) {
+    const waitingOverlay = document.getElementById('waitingOverlay');
+    if (status === 'approved') {
+      isApproved = true;
+      if (waitingOverlay) waitingOverlay.style.display = 'none';
+    } else if (status === 'pending') {
+      isApproved = false;
+      if (waitingOverlay) {
+        waitingOverlay.style.display = 'flex';
+        const title = waitingOverlay.querySelector('.waiting-title');
+        const desc = waitingOverlay.querySelector('.waiting-desc');
+        if (title) title.textContent = t('waiting_host_approval');
+        if (desc) desc.innerHTML = t('waiting_approval_desc');
+        const icon = waitingOverlay.querySelector('.waiting-icon');
+        if (icon) icon.textContent = '🔒';
+      }
+    } else if (status === 'rejected') {
+      isApproved = false;
+      if (waitingOverlay) {
+        waitingOverlay.style.display = 'flex';
+        const title = waitingOverlay.querySelector('.waiting-title');
+        const desc = waitingOverlay.querySelector('.waiting-desc');
+        if (title) title.textContent = t('host_refused_connection') !== 'host_refused_connection' ? t('host_refused_connection') : 'Connection refused';
+        if (desc) desc.textContent = '';
+        const icon = waitingOverlay.querySelector('.waiting-icon');
+        if (icon) icon.textContent = '🚫';
+      }
+    }
+  }
+
+  function showApprovalModal() {
+    const modal = document.getElementById('approvalModal');
+    const infoDiv = document.getElementById('approvalDeviceInfo');
+    if (infoDiv && pendingRequests.length > 0) {
+      const req = pendingRequests[0];
+      infoDiv.textContent = `${req.ip ?? 'Unknown'} • ${formatBrowserInfo(req.browser)}`;
+    }
+    if (modal && !modal.classList.contains('show')) {
+      modal.classList.add('show');
+      setTimeout(() => {
+        const approveBtn = modal.querySelector('.btn-approve');
+        if (approveBtn) approveBtn.focus();
+      }, 400);
+    }
+  }
+
+  function hideApprovalModal() {
+    const modal = document.getElementById('approvalModal');
+    if (modal && modal.classList.contains('show')) modal.classList.remove('show');
+  }
+
+  async function handleApprovalDecision(decision) {
+    if (pendingRequests.length === 0) return;
+    const target = pendingRequests[0];
+    try {
+      const response = await fetch(`${apiUrl()}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID, targetId: target.clientId, decision }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        pendingRequests.shift();
+        if (pendingRequests.length === 0) hideApprovalModal();
+        else showApprovalModal();
+      }
+    } catch (error) {
+      console.error('Approval error:', error);
+    }
+  }
+  document.querySelectorAll('#approvalModal .btn-approve').forEach(btn => btn.addEventListener('click', () => handleApprovalDecision('approve')));
+  document.querySelectorAll('#approvalModal .btn-reject').forEach(btn => btn.addEventListener('click', () => handleApprovalDecision('reject')));
+
+  function applyPendingRequests(pending) {
+    pendingRequests = pending || [];
+    if (isApproved && pendingRequests.length > 0) showApprovalModal();
+    else hideApprovalModal();
+  }
+
+  async function joinSession() {
+    try {
+      const response = await fetch(`${apiUrl()}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID, userAgent: navigator.userAgent }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateSessionState(data.status);
+        applyPendingRequests(data.pending_requests);
+        startPolling();
+        connectWebSocket();
+      } else {
+        console.error('Join failed:', data.error);
+      }
+    } catch (error) {
+      console.error('Join error:', error);
+    }
+  }
+
+  function startPolling() {
+    if (pollingInterval) clearTimeout(pollingInterval);
+    pollSessionLoop();
+  }
+
+  async function pollSessionLoop() {
+    if (!isUploading) await pollSessionState();
+    pollingInterval = setTimeout(pollSessionLoop, 4000);
+  }
+
+  async function pollSessionState() {
+    try {
+      const response = await fetch(`${apiUrl()}/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateSessionState(data.status);
+        applyPendingRequests(data.pending_requests);
+        if (isApproved) syncFiles();
+      }
+    } catch (error) {
+      console.error('Polling error:', error);
+    }
+  }
+
+  // WebSocket for real-time notifications (hibernation-aware on the server)
+  let webSocket = null;
+  let webSocketBackoff = 2000;
+  function connectWebSocket() {
+    try {
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      webSocket = new WebSocket(`${scheme}//${location.host}${apiUrl()}/ws?clientId=${encodeURIComponent(CLIENT_ID)}`);
+      webSocket.onmessage = async event => {
+        webSocketBackoff = 2000;
+        const message = JSON.parse(event.data);
+        if (message.type === 'client-joined' && isApproved) {
+          pendingRequests.push(message.client);
+          showApprovalModal();
+        }
+        if (message.type === 'client-approved' && message.clientId === CLIENT_ID) {
+          updateSessionState('approved');
+          syncFiles();
+        }
+        if (message.type === 'client-rejected' && message.clientId === CLIENT_ID) {
+          updateSessionState('rejected');
+        }
+        if (['file-uploaded', 'file-deleted', 'file-expired'].includes(message.type) && isApproved) syncFiles();
+      };
+      webSocket.onclose = () => {
+        setTimeout(connectWebSocket, webSocketBackoff);
+        webSocketBackoff = Math.min(webSocketBackoff * 2, 30000);
+      };
+    } catch { /* Polling keeps the session alive without WebSockets. */ }
+  }
+
+  // --- Files ---
+  function updateFileListUI(files) {
+    const fileItems = document.getElementById('fileItems');
+    if (!fileItems) return;
+
+    const currentHash = files.map(file => `${file.id}:${Math.ceil((file.expiresAt - Date.now()) / 1000)}`).join('|');
+    if (currentHash === lastSyncHash) return;
+    lastSyncHash = currentHash;
+
+    const deleteAllBtn = document.getElementById('deleteAllBtn');
+    if (deleteAllBtn) deleteAllBtn.classList.toggle('show', files.length > 0);
+
+    if (files.length === 0) {
+      fileItems.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📭</div>
+          <div class="upload-text">${t('no_files_yet')}</div>
+        </div>`;
       return;
     }
-    const form = new FormData();
-    for (const file of files) form.append('content', file, file.name);
-    form.append('clientId', clientId);
-    statusNode.textContent = t('preparing');
+
+    const grid = document.createElement('div');
+    grid.className = 'file-grid';
+
+    files.forEach(file => {
+      const remaining = Math.max(0, Math.ceil((file.expiresAt - Date.now()) / 1000));
+      const card = document.createElement('a');
+      card.href = `${apiUrl()}/download/${encodeURIComponent(file.id)}?clientId=${encodeURIComponent(CLIENT_ID)}`;
+      card.className = 'file-card';
+      card.setAttribute('download', '');
+      card.dataset.remaining = remaining;
+
+      const icon = document.createElement('div');
+      icon.className = 'file-icon';
+      icon.textContent = '📄';
+
+      const name = document.createElement('div');
+      name.className = 'file-name';
+      name.title = file.name;
+      name.textContent = file.name;
+
+      const meta = document.createElement('div');
+      meta.className = 'file-meta';
+
+      const size = document.createElement('span');
+      size.style.whiteSpace = 'nowrap';
+      size.textContent = formatSize(file.size);
+
+      const timeBadge = document.createElement('div');
+      timeBadge.className = 'time-badge';
+      if (remaining >= 60) timeBadge.classList.add('safe');
+
+      const timerSpan = document.createElement('span');
+      timerSpan.className = 'countdown-timer';
+      timerSpan.textContent = `${Math.floor(remaining / 60)}m ${remaining % 60}s`;
+
+      timeBadge.textContent = '⏱️ ';
+      timeBadge.appendChild(timerSpan);
+
+      meta.appendChild(size);
+      meta.appendChild(timeBadge);
+      card.appendChild(icon);
+      card.appendChild(name);
+      card.appendChild(meta);
+      grid.appendChild(card);
+    });
+
+    fileItems.innerHTML = '';
+    fileItems.appendChild(grid);
+  }
+
+  async function syncFiles() {
+    if (progressOverlay && progressOverlay.style.display === 'flex') return;
+    if (!isApproved) return;
     try {
-      const data = await new Promise((resolve, reject) => {
+      const response = await fetch(`${apiUrl()}/files?clientId=${encodeURIComponent(CLIENT_ID)}&_=${Date.now()}`, { cache: 'no-store' });
+      if (response.status === 403) return;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.success && data.files) updateFileListUI(data.files);
+    } catch (error) {
+      console.warn('Sync failed:', error.message);
+    }
+  }
+
+  // --- Uploads ---
+  async function uploadFiles(files) {
+    if (isUploading) return;
+    const maxFileBytes = Number(dropZone?.dataset.maxFileBytes);
+    if (Number.isFinite(maxFileBytes) && maxFileBytes > 0) {
+      for (const file of files) {
+        if (file.size > maxFileBytes) {
+          showToast(`❌ ${t('file_too_large_with_max', { filename: file.name, max_mb: Math.floor(maxFileBytes / (1024 * 1024)) })}`);
+          return;
+        }
+      }
+    }
+
+    isUploading = true;
+    if (progressOverlay) {
+      progressOverlay.style.display = 'flex';
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressText) progressText.textContent = t('preparing');
+    }
+
+    const totalFiles = files.length;
+    const formData = new FormData();
+    for (const file of files) {
+      let fileName = file.name;
+      if (fileName.normalize) fileName = fileName.normalize('NFC');
+      formData.append('content', file, fileName);
+    }
+    formData.append('clientId', CLIENT_ID);
+
+    try {
+      const finalData = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener('progress', event => {
           if (!event.lengthComputable) return;
           const percent = Math.round((event.loaded / event.total) * 100);
-          statusNode.textContent = files.length > 1
-            ? t('upload_progress_multiple', { count: files.length, percent })
-            : t('upload_progress_single', { percent });
+          if (progressBar) progressBar.style.width = `${percent}%`;
+          if (progressText) {
+            progressText.textContent = totalFiles > 1
+              ? t('upload_progress_multiple', { count: totalFiles, percent })
+              : t('upload_progress_single', { percent });
+          }
         });
         xhr.onload = () => {
           let payload = {};
@@ -143,47 +465,180 @@
         xhr.onerror = () => reject(new Error(t('network_error')));
         xhr.onabort = () => reject(new Error(t('upload_aborted')));
         xhr.ontimeout = () => reject(new Error(t('upload_timeout')));
-        xhr.open('POST', `${api}/upload`);
-        xhr.send(form);
+        xhr.open('POST', `${apiUrl()}/upload`);
+        xhr.send(formData);
       });
-      statusNode.textContent = data.success ? t('upload_complete') : apiError(data, 200);
-      await refresh();
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressText) progressText.textContent = t('upload_complete');
+      if (finalData.success) {
+        await syncFiles();
+        setTimeout(() => {
+          if (progressOverlay) progressOverlay.style.display = 'none';
+          isUploading = false;
+        }, 600);
+      } else {
+        throw new Error(apiError(finalData, 200));
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      showToast(`❌ ${error.message}`);
+      if (progressOverlay) progressOverlay.style.display = 'none';
+      isUploading = false;
     }
-    catch (error) { statusNode.textContent = error.message; }
   }
-  dropZone.onclick = () => fileInput.click();
-  fileInput.onchange = () => { if (fileInput.files.length) sendFiles(fileInput.files); fileInput.value = ''; };
-  for (const event of ['dragenter','dragover']) dropZone.addEventListener(event, e => {e.preventDefault();dropZone.classList.add('drag');});
-  for (const event of ['dragleave','drop']) dropZone.addEventListener(event, e => {e.preventDefault();dropZone.classList.remove('drag');});
-  dropZone.addEventListener('drop', e => { if (e.dataTransfer.files.length) sendFiles(e.dataTransfer.files); });
-  document.querySelector('#sendText').onclick = async () => {
-    const content = document.querySelector('#textInput').value;
-    if (!content.trim()) { statusNode.textContent = t('enter_content'); return; }
-    statusNode.textContent = t('text_uploading');
+
+  async function deleteAllFiles() {
+    const cards = document.querySelectorAll('.file-card');
+    if (cards.length === 0) return;
+
+    cards.forEach((card, index) => {
+      setTimeout(() => { card.classList.add('falling'); }, index * 50);
+    });
+
+    const deleteAllBtn = document.getElementById('deleteAllBtn');
+    if (deleteAllBtn) deleteAllBtn.classList.remove('show');
+
+    await new Promise(resolve => setTimeout(resolve, 800));
+
     try {
-      await request('upload', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({content,clientId})});
-      document.querySelector('#textInput').value = '';
-      statusNode.textContent = t('upload_complete');
-      await refresh();
+      const response = await fetch(`${apiUrl()}/delete_all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        lastSyncHash = '';
+        await syncFiles();
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      showToast(`❌ ${t('delete_failed')}`);
     }
-    catch (error) { statusNode.textContent = error.message; }
-  };
-  document.querySelector('#deleteAll').onclick = async () => {
-    try { await request('delete_all', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({clientId})}); await refresh(); }
-    catch (error) { statusNode.textContent = error.message; }
-  };
-  function updateCountdowns() {
-    document.querySelectorAll('[data-expiry]').forEach(node => { const seconds = Math.max(0, Math.ceil((Number(node.dataset.expiry)-Date.now())/1000)); node.textContent = `${Math.floor(seconds/60)}m ${seconds%60}s`; });
   }
-  setInterval(updateCountdowns, 1000);
-  setInterval(async () => {
+  const deleteAllBtn = document.getElementById('deleteAllBtn');
+  if (deleteAllBtn) deleteAllBtn.addEventListener('click', deleteAllFiles);
+
+  // Text modal
+  const textModal = document.getElementById('textModal');
+  const textInputTextArea = document.getElementById('textInputTextArea');
+  const openTextModal = event => {
+    if (event) event.stopPropagation();
+    if (textModal) {
+      textModal.classList.add('show');
+      setTimeout(() => { if (textInputTextArea) textInputTextArea.focus(); }, 100);
+    }
+  };
+  window.closeTextModal = () => { if (textModal) textModal.classList.remove('show'); };
+  window.openTextModal = openTextModal;
+  const textInputBtn = document.getElementById('textInputBtn');
+  if (textInputBtn) textInputBtn.addEventListener('click', openTextModal);
+  const closeTextModalBtn = document.getElementById('closeTextModal');
+  if (closeTextModalBtn) closeTextModalBtn.addEventListener('click', window.closeTextModal);
+  if (textModal) {
+    textModal.addEventListener('click', event => { if (event.target === textModal) window.closeTextModal(); });
+  }
+  if (textInputTextArea) {
+    textInputTextArea.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        saveText();
+      }
+    });
+  }
+
+  async function saveText() {
+    const text = textInputTextArea ? textInputTextArea.value : '';
+    if (!text.trim()) {
+      showToast(`❌ ${t('enter_content')}`);
+      return;
+    }
+    const saveBtn = document.querySelector('.save-text-btn');
+    const originalText = saveBtn ? saveBtn.textContent : '';
+    if (saveBtn) { saveBtn.textContent = t('text_uploading'); saveBtn.disabled = true; }
+
     try {
-      const state = await request('heartbeat', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({clientId})});
-      approved = state.status === 'approved';
-      if (state.host) host = true;
-      pending = state.pending_requests || pending;
-      renderPending(); renderFiles();
-    } catch { try { await join(); } catch { /* A reload can rejoin if a session has expired. */ } }
-  }, 30_000);
-  join().catch(error => { statusNode.textContent = error.message; });
+      const response = await fetch(`${apiUrl()}/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text, clientId: CLIENT_ID }),
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(apiError(data, response.status));
+      showToast(`✅ ${t('text_file_created')}`);
+      if (textInputTextArea) textInputTextArea.value = '';
+      window.closeTextModal();
+      lastSyncHash = '';
+      await syncFiles();
+    } catch (error) {
+      console.error('Text upload error:', error);
+      showToast(`❌ ${t('save_failed_prefix')} ${error.message}`);
+    } finally {
+      if (saveBtn) { saveBtn.textContent = originalText; saveBtn.disabled = false; }
+    }
+  }
+  const saveTextBtn = document.getElementById('saveTextBtn');
+  if (saveTextBtn) saveTextBtn.addEventListener('click', saveText);
+
+  // Session code copy link
+  const sessionCodeEl = document.getElementById('sessionCode');
+  function copyURL() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      showToast(`✅ ${t('link_copied')}`);
+    }).catch(() => {
+      showToast(`❌ ${t('copy_failed')}`);
+    });
+  }
+  if (sessionCodeEl) {
+    sessionCodeEl.textContent = `${SESSION_CODE} 🔗`;
+    sessionCodeEl.addEventListener('click', copyURL);
+    sessionCodeEl.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        copyURL();
+      }
+    });
+  }
+
+  // Drag & drop
+  if (dropZone) {
+    dropZone.addEventListener('click', event => {
+      if (event.target === textInputBtn) return;
+      if (fileInput) fileInput.click();
+    });
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, event => {
+        event.preventDefault();
+        event.stopPropagation();
+      }, false);
+    });
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+    dropZone.addEventListener('drop', event => {
+      if (event.dataTransfer.files.length > 0) uploadFiles(event.dataTransfer.files);
+    }, false);
+    dropZone.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        if (event.target === dropZone) {
+          event.preventDefault();
+          if (fileInput) fileInput.click();
+        }
+      }
+    });
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', event => {
+      if (event.target.files.length > 0) uploadFiles(event.target.files);
+      event.target.value = '';
+    });
+  }
+
+  // Init
+  initTheme();
+  setInterval(updateCountdownDisplay, 1000);
+  joinSession();
 })();
