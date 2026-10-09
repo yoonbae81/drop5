@@ -9,6 +9,7 @@ import {
 
 export { Session };
 
+interface RateLimiter { limit: (options: { key: string }) => Promise<{ success: boolean }> }
 export interface Env {
   ASSETS: Fetcher;
   FILES: R2Bucket;
@@ -19,6 +20,8 @@ export interface Env {
   FILE_TTL_SECONDS?: string;
   SESSION_TTL_SECONDS?: string;
   BASE_PATH?: string;
+  SESSION_CREATE_LIMITER?: RateLimiter;
+  UPLOAD_LIMITER?: RateLimiter;
 }
 
 const CODE_RE = /^[A-Za-z0-9_-]{3,128}$/;
@@ -248,18 +251,20 @@ function basePath(env: Env): string {
   return '/' + raw.replace(/^\/+|\/+$/g, '');
 }
 
-function route(request: Request, env: Env): Promise<Response> {
+async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const base = basePath(env);
   let path = url.pathname;
   if (base) {
     if (path === base || path === base + '/') {
+      const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+      if (!await rateLimited(env.SESSION_CREATE_LIMITER, ip)) return failure(request, env, 429, 'connection_refused', 'Too many requests');
       const bytes = crypto.getRandomValues(new Uint8Array(16));
       const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-      return Promise.resolve(Response.redirect(new URL(`${base}/${code}`, url), 302));
+      return Response.redirect(new URL(`${base}/${code}`, url), 302);
     }
     if (path.startsWith(base + '/')) path = path.slice(base.length);
-    else return Promise.resolve(failure(request, env, 404, 'connection_refused', 'Not found'));
+    else return failure(request, env, 404, 'connection_refused', 'Not found');
   }
   return routeSession(request, env, url, path);
 }
@@ -268,8 +273,21 @@ function isAssetPath(path: string): boolean {
   return path === '/favicon.ico' || path === '/style.css' || path === '/app.js' || localeAsset(path);
 }
 
+async function rateLimited(limiter: RateLimiter | undefined, key: string): Promise<boolean> {
+  // Absent binding (local tests) means unlimited; fail open on limiter errors
+  // so a limiter outage never takes downloads down.
+  if (!limiter) return true;
+  try {
+    return (await limiter.limit({ key })).success;
+  } catch {
+    return true;
+  }
+}
+
 async function routeSession(request: Request, env: Env, url: URL, path: string): Promise<Response> {
   if (path === '/' || path === '') {
+    const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
+    if (!await rateLimited(env.SESSION_CREATE_LIMITER, ip)) return failure(request, env, 429, 'connection_refused', 'Too many requests');
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
     return Response.redirect(new URL(`/${code}`, url), 302);
@@ -310,7 +328,11 @@ async function routeSession(request: Request, env: Env, url: URL, path: string):
     if (!CLIENT_RE.test(clientId)) return failure(request, env, 400, 'device_approval_required', 'Invalid client ID');
     return commandResponse(await command(stub, 'list', { clientId }), request, env);
   }
-  if (action === 'upload' && request.method === 'POST') return upload(request, env, code);
+  if (action === 'upload' && request.method === 'POST') {
+    const clientId = url.searchParams.get('clientId') ?? 'anonymous';
+    if (!await rateLimited(env.UPLOAD_LIMITER, `${code}:${clientId}`)) return failure(request, env, 429, 'upload_failed', 'Too many requests');
+    return upload(request, env, code);
+  }
   if (action === 'delete_all' && request.method === 'POST') {
     let data: Record<string, unknown>;
     if (request.headers.get('content-type')?.includes('application/json')) {

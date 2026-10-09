@@ -9,10 +9,10 @@ const code = 'test-session';
 const hostId = 'host-12345678';
 const guestId = 'guest-12345678';
 
-function request(path: string, init?: RequestInit): Promise<Response> {
+function request(path: string, init?: RequestInit, testEnv?: Record<string, unknown>): Promise<Response> {
   // Tests exercise the no-base-path deployment; the /drop5 prefix path is
   // covered separately in the base-path test below.
-  return worker.fetch(new Request(`${origin}${path}`, init), { ...env, BASE_PATH: '' });
+  return worker.fetch(new Request(`${origin}${path}`, init), { ...env, BASE_PATH: '', ...testEnv });
 }
 
 async function json(response: Response): Promise<Record<string, any>> {
@@ -324,5 +324,46 @@ describe('base path', () => {
     const redirect = await rootRequest('/');
     expect(redirect.status).toBe(302);
     expect(new URL(redirect.headers.get('location')!).pathname).toMatch(/^\/[A-Za-z0-9_-]{3,128}$/);
+  });
+});
+
+describe('rate limiting', () => {
+  function limiter(limit: number): { limit: (options: { key: string }) => Promise<{ success: boolean }>; calls: string[] } {
+    const calls: string[] = [];
+    return {
+      calls,
+      limit: async ({ key }) => {
+        calls.push(key);
+        return { success: calls.filter(entry => entry === key).length <= limit };
+      },
+    };
+  }
+
+  it('returns 429 when session creation exceeds the limit and keys by IP', async () => {
+    const sessionLimiter = limiter(2);
+    const testEnv = { ...env, BASE_PATH: '', SESSION_CREATE_LIMITER: sessionLimiter };
+    const create = () => worker.fetch(new Request(`${origin}/`, { headers: { 'cf-connecting-ip': '1.2.3.4' } }), testEnv);
+    expect((await create()).status).toBe(302);
+    expect((await create()).status).toBe(302);
+    expect((await create()).status).toBe(429);
+    expect((await worker.fetch(new Request(`${origin}/`, { headers: { 'cf-connecting-ip': '5.6.7.8' } }), testEnv)).status).toBe(302);
+  });
+
+  it('returns 429 when uploads exceed the limit and fails open without a binding', async () => {
+    const uploadLimiter = limiter(1);
+    const testEnv = { ...env, BASE_PATH: '', UPLOAD_LIMITER: uploadLimiter };
+    const form = () => { const data = new FormData(); data.append('content', new File(['x'], 'ok.txt')); return data; };
+    const upload = () => request(`/${code}/upload`, { method: 'POST', body: form() }, testEnv);
+    expect((await upload()).status).toBe(200);
+    expect((await upload()).status).toBe(429);
+    // No binding configured -> unlimited.
+    expect((await request(`/${code}/upload`, { method: 'POST', body: form() })).status).toBe(200);
+  });
+
+  it('fails open when the limiter binding throws', async () => {
+    const throwing = { limit: () => { throw new Error('limiter down'); } };
+    const testEnv = { ...env, BASE_PATH: '', SESSION_CREATE_LIMITER: throwing };
+    const response = await worker.fetch(new Request(`${origin}/`, { headers: { 'cf-connecting-ip': '1.2.3.4' } }), testEnv);
+    expect(response.status).toBe(302);
   });
 });
