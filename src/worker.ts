@@ -124,7 +124,7 @@ async function indexResponse(request: Request, env: Env, sessionCode: string): P
     .on('[data-i18n]', {
       element(element) {
         const key = element.getAttribute('data-i18n');
-        if (key && translations[key]) element.setInnerContent(translations[key]);
+        if (key && translations[key]) element.setInnerContent(translations[key], { html: true });
       },
     })
     .on('[data-i18n-title]', {
