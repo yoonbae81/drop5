@@ -254,6 +254,32 @@ function basePath(env: Env): string {
   return '/' + raw.replace(/^\/+|\/+$/g, '');
 }
 
+function generateSessionCode(): string {
+  // Match the original system's rule: 5-char alphanumeric, 62^5 ≈ 916M combos.
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  // Rejection sampling to avoid modulo bias.
+  for (let i = 0; i < 5; i++) {
+    let byte: number;
+    do { byte = crypto.getRandomValues(new Uint8Array(1))[0]; } while (byte >= 248); // 248 = 62*4
+    code += chars[byte % 62];
+  }
+  return code;
+}
+
+// Session codes become DO names, so collision does not corrupt data — but a
+// fresh visitor joining an existing code would hijack that session. Probe the
+// DO before handing out the code; at 62^5 ≈ 916M combos collisions are rare.
+async function uniqueSessionCode(env: Env): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateSessionCode();
+    const stub = sessionStub(env, code);
+    const probe = await command(stub, 'probe', {});
+    if (!probe.data.exists) return code;
+  }
+  throw new Error('Unable to generate a unique session code');
+}
+
 async function route(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const base = basePath(env);
@@ -262,9 +288,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (path === base || path === base + '/') {
       const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
       if (!await rateLimited(env.SESSION_CREATE_LIMITER, ip)) return failure(request, env, 429, 'connection_refused', 'Too many requests');
-      const bytes = crypto.getRandomValues(new Uint8Array(16));
-      const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-      return Response.redirect(new URL(`${base}/${code}`, url), 302);
+      return Response.redirect(new URL(`${base}/${await uniqueSessionCode(env)}`, url), 302);
     }
     if (path.startsWith(base + '/')) path = path.slice(base.length);
     else return failure(request, env, 404, 'connection_refused', 'Not found');

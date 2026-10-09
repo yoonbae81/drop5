@@ -50,6 +50,16 @@ export function negotiateLocale(header: string | null): Locale {
 }
 
 export function requestLocale(request: Request): Locale {
+  // Priority matches the Python original: saved cookie preference first,
+  // then the Accept-Language header.
+  const cookieHeader = request.headers.get('cookie');
+  if (cookieHeader) {
+    const match = cookieHeader.match(/(?:^|;\s*)drop5_lang=([A-Za-z-]+)/);
+    if (match) {
+      const locale = supportedLocale(match[1]);
+      if (locale) return locale;
+    }
+  }
   return negotiateLocale(request.headers.get('accept-language'));
 }
 

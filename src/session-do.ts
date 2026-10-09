@@ -17,6 +17,7 @@ interface Env { FILES: R2Bucket; SESSION_TTL_SECONDS?: string }
 
 export class Session extends DurableObject<Env> {
   private data: State | null = null;
+  private dataIsStored = false;
   private serial: Promise<void> = Promise.resolve();
 
   constructor(state: DurableObjectState, env: Env) { super(state, env); }
@@ -29,6 +30,7 @@ export class Session extends DurableObject<Env> {
       ? { ...stored, expiresAt: stored.expiresAt ?? createdAt + this.sessionTtlMs() }
       : { createdAt, expiresAt: createdAt + this.sessionTtlMs(), clients: {}, hostId: null, files: [] };
     this.data = data;
+    this.dataIsStored = !!stored;
     return data;
   }
   private async save(): Promise<void> { await this.ctx.storage.put('state', this.data); }
@@ -60,6 +62,14 @@ export class Session extends DurableObject<Env> {
       state = await this.load();
     }
     switch (input.op) {
+      case 'probe': {
+        // Cheap existence check for session-code uniqueness at generation time.
+        // load() synthesizes a default state for unknown codes, so rely on the
+        // stored-origin flag instead of the state values.
+        await this.load();
+        const exists = this.dataIsStored && (this.data?.expiresAt ?? 0) > now;
+        return this.response({ exists });
+      }
       case 'touch': {
         this.refreshSession(state, now);
         await this.save(); await this.scheduleAlarm();

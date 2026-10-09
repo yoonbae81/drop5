@@ -106,12 +106,25 @@
   }
   if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 
-  // Language toggle: switch cookie between current locale and English
+  // Language toggle: switch between current locale and the native counterpart
+  // (original behavior: en <-> native, native defaults to ko like the Python app).
+  const nativeLocale = (() => {
+    const cookieLocale = (() => {
+      const match = document.cookie.match(/(?:^|;\s*)drop5_lang=([A-Za-z-]+)/);
+      return match ? match[1] : null;
+    })();
+    if (cookieLocale && cookieLocale !== 'en') return cookieLocale;
+    // Original app derives "native" from IP; Accept-Language is its fallback.
+    const accept = navigator.language || 'ko';
+    const candidate = accept.split(',')[0].trim().split('-')[0];
+    return candidate === 'en' || !candidate ? 'ko' : candidate;
+  })();
   const langToggle = document.getElementById('langToggle');
   if (langToggle) {
     langToggle.addEventListener('click', () => {
-      const target = locale === 'en' ? 'ko' : 'en';
-      setCookie('drop5_lang', target, 365);
+      const target = locale === 'en' ? nativeLocale : 'en';
+      // Max-age so the cookie is not a session cookie; path=/ covers base paths.
+      document.cookie = `drop5_lang=${target};path=/;max-age=${365 * 24 * 60 * 60};samesite=lax`;
       location.reload();
     });
   }

@@ -327,8 +327,7 @@ describe('base path', () => {
   });
 });
 
-describe('rate limiting', () => {
-  function limiter(limit: number): { limit: (options: { key: string }) => Promise<{ success: boolean }>; calls: string[] } {
+describe('rate limiting', () => {  function limiter(limit: number): { limit: (options: { key: string }) => Promise<{ success: boolean }>; calls: string[] } {
     const calls: string[] = [];
     return {
       calls,
