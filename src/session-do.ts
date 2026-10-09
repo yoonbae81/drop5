@@ -12,7 +12,7 @@ interface StoredFile {
   reservationExpiresAt?: number;
 }
 interface Client { status: 'approved' | 'pending' | 'rejected'; joinedAt: number; lastSeen: number; userAgent: string; ip?: string }
-interface State { createdAt: number; expiresAt: number; clients: Record<string, Client>; hostId: string | null; files: StoredFile[] }
+interface State { createdAt: number; expiresAt: number; clients: Record<string, Client>; hostId: string | null; files: StoredFile[]; trustedIps?: Record<string, number> }
 interface Env { FILES: R2Bucket; SESSION_TTL_SECONDS?: string }
 
 export class Session extends DurableObject<Env> {
@@ -78,14 +78,31 @@ export class Session extends DurableObject<Env> {
       case 'join': {
         const id = input.clientId as string;
         const clientIp = input.ip as string | undefined;
+        const trusted = !!(clientIp && state.trustedIps?.[clientIp]);
         if (!state.clients[id]) {
           const hasApproved = Object.values(state.clients).some(client => client.status === 'approved');
-          const status = !state.hostId || !hasApproved ? 'approved' : 'pending';
+          // Original semantics: trusted IPs (previously approved on this session)
+          // skip the approval prompt; a session without an approved host approves
+          // the first joiner.
+          const status = !state.hostId || !hasApproved || trusted ? 'approved' : 'pending';
           state.clients[id] = { status, joinedAt: now, lastSeen: now, userAgent: String(input.userAgent ?? '').slice(0, 300), ip: clientIp };
           if (!state.hostId && status === 'approved') state.hostId = id;
+          if (status === 'approved' && clientIp) {
+            state.trustedIps = state.trustedIps ?? {};
+            state.trustedIps[clientIp] = now;
+          }
           await this.save();
           if (status === 'pending') this.broadcast({ type: 'client-joined', client: { clientId: id, joinedAt: now, ip: clientIp ?? 'Unknown', userAgent: state.clients[id].userAgent } });
-        } else { state.clients[id].lastSeen = now; if (clientIp) state.clients[id].ip = clientIp; }
+        } else {
+          state.clients[id].lastSeen = now;
+          if (clientIp) state.clients[id].ip = clientIp;
+          if (trusted && state.clients[id].status === 'pending') {
+            state.clients[id].status = 'approved';
+            state.trustedIps = state.trustedIps ?? {};
+            if (clientIp) state.trustedIps[clientIp] = now;
+            this.broadcast({ type: 'client-approved', clientId: id });
+          }
+        }
         this.refreshSession(state, now);
         await this.save(); await this.scheduleAlarm();
         return this.response({ success: true, status: state.clients[id].status, host: state.hostId === id, pending_requests: this.pending(state) });
@@ -96,7 +113,23 @@ export class Session extends DurableObject<Env> {
         }
         if (!state.clients[state.hostId ?? '']) state.hostId = null;
         const client = state.clients[input.clientId];
-        if (!client) return this.response({ success: false, error: 'Unknown client', errorKey: 'device_approval_required' }, 403);
+        const heartbeatIp = input.ip as string | undefined;
+        if (!client) {
+          // Original semantics: a client lost from state (DO restart, eviction)
+          // re-registers here — auto-approved when no host exists or its IP is
+          // trusted, otherwise it joins as pending instead of dead-ending.
+          const trusted = !!(heartbeatIp && state.trustedIps?.[heartbeatIp]);
+          const hasApproved = Object.values(state.clients).some(item => item.status === 'approved');
+          const status = !state.hostId || !hasApproved || trusted ? 'approved' : 'pending';
+          state.clients[input.clientId as string] = { status, joinedAt: now, lastSeen: now, userAgent: String(input.userAgent ?? '').slice(0, 300), ip: heartbeatIp };
+          if (!state.hostId && status === 'approved') state.hostId = input.clientId as string;
+          if (status === 'approved' && heartbeatIp) {
+            state.trustedIps = state.trustedIps ?? {};
+            state.trustedIps[heartbeatIp] = now;
+          }
+          await this.save();
+          return this.response({ success: true, status, host: state.hostId === input.clientId, pending_requests: this.pending(state) });
+        }
         client.lastSeen = now;
         const activeHost = Object.entries(state.clients).find(([, item]) => item.status === 'approved');
         if (!activeHost) {
@@ -111,11 +144,16 @@ export class Session extends DurableObject<Env> {
         return this.response({ success: true, status: client.status, host: state.hostId === input.clientId, pending_requests: this.pending(state) });
       }
       case 'approve': {
-        if (input.clientId !== state.hostId || !await this.approved(input.clientId)) return this.response({ success: false, error: 'Unauthorized', errorKey: 'device_approval_required' }, 403);
+        // Original semantics: any approved client may approve, not only the host.
+        if (!await this.approved(input.clientId)) return this.response({ success: false, error: 'Unauthorized', errorKey: 'device_approval_required' }, 403);
         const target = state.clients[input.targetId];
         if (!target) return this.response({ success: false, error: 'Target client not found', errorKey: 'connection_refused' }, 404);
         if (input.decision !== 'approve' && input.decision !== 'reject') return this.response({ success: false, error: 'Invalid decision', errorKey: 'connection_refused' }, 400);
         target.status = input.decision === 'approve' ? 'approved' : 'rejected';
+        if (input.decision === 'approve' && target.ip) {
+          state.trustedIps = state.trustedIps ?? {};
+          state.trustedIps[target.ip] = now;
+        }
         this.refreshSession(state, now);
         await this.save(); await this.scheduleAlarm();
         this.broadcast({ type: input.decision === 'approve' ? 'client-approved' : 'client-rejected', clientId: input.targetId });
@@ -123,14 +161,23 @@ export class Session extends DurableObject<Env> {
       }
       case 'list': {
         if (!await this.approved(input.clientId)) return this.response({ success: false, error: 'Unauthorized', errorKey: 'device_approval_required', status: 'pending' }, 403);
-        if (await this.expireFiles()) return this.response({ success: true, files: [] });
+        await this.expireFiles();
         return this.response({ success: true, files: state.files.filter(file => !file.reservation).map(file => ({ id: file.id, name: file.name, size: file.size, expiresAt: file.expiresAt, uploadedAt: file.uploadedAt })) });
       }
       case 'reserve': {
         const files = input.files as StoredFile[];
-        if (await this.expireFiles()) state = await this.load();
-        const active = state.files;
-        if (active.length + files.length > input.maxFiles) {
+        await this.expireFiles();
+        // Original semantics: same-name uploads overwrite the existing entry,
+        // so they do not consume extra count/storage quota.
+        const names = new Set(files.map(file => file.name));
+        // Reservations hold quota too; only entries this batch replaces (same
+        // name, not reserved) are excluded from the accounting.
+        const active = state.files.filter(file => !names.has(file.name));
+        const accepted = files.filter(file => {
+          const maxBytes = Number(input.maxBytes);
+          return Number.isFinite(maxBytes) ? file.size <= maxBytes : true;
+        });
+        if (active.length + accepted.length > input.maxFiles) {
           return this.response({
             success: false,
             error: 'File count limit exceeded',
@@ -138,7 +185,7 @@ export class Session extends DurableObject<Env> {
             errorParams: { mode: 'default', limit: input.maxFiles },
           }, 409);
         }
-        if (active.reduce((sum, file) => sum + file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > input.maxBytes) {
+        if (active.reduce((sum, file) => sum + file.size, 0) + accepted.reduce((sum, file) => sum + file.size, 0) > input.maxBytes) {
           return this.response({
             success: false,
             error: 'Storage limit exceeded',
@@ -146,12 +193,14 @@ export class Session extends DurableObject<Env> {
             errorParams: { max_mb: Math.floor(input.maxBytes / (1024 * 1024)) },
           }, 409);
         }
-        for (const file of files) { file.uploadedAt = now; file.reservation = true; file.reservationExpiresAt = now + 2 * 60 * 1000; }
-        state.files.push(...files);
+        for (const file of accepted) { file.uploadedAt = now; file.reservation = true; file.reservationExpiresAt = now + 2 * 60 * 1000; }
+        // Drop non-reserved entries with the same names so commit replaces them.
+        state.files = state.files.filter(file => !(names.has(file.name) && !file.reservation && accepted.some(acceptedFile => acceptedFile.name === file.name)));
+        state.files.push(...accepted);
         this.refreshSession(state, now);
         await this.save();
         await this.scheduleAlarm();
-        return this.response({ success: true });
+        return this.response({ success: true, reserved: accepted.map(file => ({ id: file.id, name: file.name })) });
       }
       case 'commit': {
         const replacements = input.files as Array<StoredFile>;
@@ -174,7 +223,7 @@ export class Session extends DurableObject<Env> {
       }
       case 'getFile': {
         if (!await this.approved(input.clientId)) return this.response({ success: false, error: 'Unauthorized', errorKey: 'device_approval_required' }, 403);
-        if (await this.expireFiles()) return this.response({ success: false, error: 'File not found', errorKey: 'upload_failed' }, 404);
+        await this.expireFiles();
         const file = state.files.find(item => !item.reservation && (item.id === input.id || item.name === input.name));
         return file ? this.response({ success: true, file }) : this.response({ success: false, error: 'File not found', errorKey: 'upload_failed' }, 404);
       }
@@ -227,10 +276,9 @@ export class Session extends DurableObject<Env> {
       await Promise.all(expired.map(file => file.objectKey ? this.env.FILES.delete(file.objectKey) : Promise.resolve()));
       state.files = state.files.filter(file => !expired.some(expiredFile => expiredFile.id === file.id));
       this.broadcast({ type: 'file-expired', ids: expired.map(file => file.id) });
-      if (!state.files.length) {
-        await this.purgeSession(state);
-        return true;
-      }
+      // Match the original: file expiry never destroys the session itself —
+      // connected clients keep their approval state. The session dies only
+      // when its own TTL (state.expiresAt) passes, via alarm()/commandRequest.
     }
     await this.save(); await this.scheduleAlarm();
     return false;

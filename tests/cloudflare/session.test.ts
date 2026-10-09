@@ -11,18 +11,22 @@ const guestId = 'guest-12345678';
 
 function request(path: string, init?: RequestInit, testEnv?: Record<string, unknown>): Promise<Response> {
   // Tests exercise the no-base-path deployment; the /drop5 prefix path is
-  // covered separately in the base-path test below.
-  return worker.fetch(new Request(`${origin}${path}`, init), { ...env, BASE_PATH: '', ...testEnv });
+  // covered separately in the base-path test below. A per-call
+  // cf-connecting-ip header keeps trusted-IP semantics testable.
+  const headers = new Headers(init?.headers);
+  if (!headers.has('cf-connecting-ip')) headers.set('cf-connecting-ip', '203.0.113.10');
+  return worker.fetch(new Request(`${origin}${path}`, { ...init, headers }), { ...env, BASE_PATH: '', ...testEnv });
 }
 
 async function json(response: Response): Promise<Record<string, any>> {
   return response.json() as Promise<Record<string, any>>;
 }
 
-async function join(clientId: string): Promise<Record<string, any>> {
+async function join(clientId: string, ip?: string): Promise<Record<string, any>> {
+  const derivedIp = ip ?? (clientId.includes('host') ? '203.0.113.1' : '203.0.113.2');
   return json(await request(`/${code}/join`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': derivedIp },
     body: JSON.stringify({ clientId }),
   }));
 }
@@ -138,8 +142,11 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     await runInDurableObject(stub, async (_instance: Session, state) => {
       expect(await state.storage.getAlarm()).not.toBeNull();
     });
+    // Reservations replace same-name entries, so these distinct names are new.
     expect((await command({ op: 'reserve', files: [file('two', 5)], maxBytes: 10, maxFiles: 2 })).status).toBe(409);
     expect((await command({ op: 'reserve', files: [file('two', 4), file('three', 0)], maxBytes: 10, maxFiles: 2 })).status).toBe(409);
+    // Re-reserving 'one' overwrites in place: 6 bytes still, not 12.
+    expect((await command({ op: 'reserve', files: [file('one', 6)], maxBytes: 10, maxFiles: 2 })).status).toBe(200);
   });
 
   it('recovers persisted session state after Durable Object eviction', async () => {
@@ -209,7 +216,7 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     expect((await json(await request(`/${code}/files?clientId=${hostId}`))).files).toHaveLength(1);
   });
 
-  it('deletes all Durable Object storage when the final file expires', async () => {
+  it('removes expired files but keeps a live session (original semantics)', async () => {
     const sessionCode = 'final-file-expiry';
     const sessionHost = 'final-file-host';
     await json(await request(`/${sessionCode}/join`, {
@@ -235,10 +242,16 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     });
 
     expect(await runDurableObjectAlarm(stub)).toBe(true);
+    // The expired file's object is gone...
     expect(await env.FILES.get(objectKey)).toBeNull();
     await runInDurableObject(stub, async (_instance: Session, state) => {
-      expect((await state.storage.list()).size).toBe(0);
-      expect(await state.storage.getAlarm()).toBeNull();
+      const stored = await state.storage.get<any>('state');
+      // ...but an active session survives file expiry, like the Python
+      // original (state file mtime refreshed by heartbeats keeps the dir).
+      expect(stored).not.toBeNull();
+      expect(stored.files).toHaveLength(0);
+      expect(stored.clients[sessionHost].status).toBe('approved');
+      expect(await state.storage.getAlarm()).not.toBeNull();
     });
   });
 

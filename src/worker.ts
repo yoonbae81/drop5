@@ -48,7 +48,7 @@ function secure(response: Response): Response {
   headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains');
   headers.set('x-download-options', 'noopen');
   headers.set('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-  headers.set('content-security-policy', "default-src 'self'; connect-src 'self' wss:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+  headers.set('content-security-policy', "default-src 'self'; connect-src 'self' wss:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
@@ -201,49 +201,56 @@ async function upload(request: Request, env: Env, code: string): Promise<Respons
   if (clientId !== undefined && clientId !== null && clientId !== '' && (typeof clientId !== 'string' || !CLIENT_RE.test(clientId))) {
     return failure(request, env, 400, 'device_approval_required', 'Invalid client ID');
   }
-  const tooLarge = entries.filter(file => file.size > maxFile);
-  if (tooLarge.length) {
-    const maxMb = Math.floor(maxFile / (1024 * 1024));
-    const { locale, translations } = await requestTranslations(request, env.ASSETS);
-    const files = tooLarge.map(file => ({ name: file.name, size: file.size, maxBytes: maxFile }));
-    const errors = files.map(file => translate(
-      translations,
-      'file_too_large_with_max',
-      '{filename} is too large (max {max_mb}MB)',
-      { filename: file.name, max_mb: maxMb },
-    ));
-    return json({
-      success: false,
-      error: errors.join('\n'),
-      errorKey: 'file_too_large_with_max',
-      errorParams: { filename: files[0].name, max_mb: maxMb },
-      files,
-    }, 413, localeHeaders(locale));
-  }
-  const files = entries.map(file => {
-    const id = crypto.randomUUID();
-    return { id, objectKey: `sessions/${code}/${id}`, name: cleanName(file.name), size: file.size, contentType: file.type, expiresAt: Date.now() + ttlMs };
-  });
-  if (files.some(file => !file.name)) {
-    const names = entries.filter((_, index) => !files[index].name).map(file => file.name);
+  // Original semantics: blocked/oversized files are skipped, the rest are
+  // uploaded. Only fail outright when nothing survives.
+  const acceptable = entries.filter(file => file.size <= maxFile && !!cleanName(file.name));
+  const rejected = entries.filter(file => !acceptable.includes(file));
+  if (!acceptable.length) {
+    const tooLarge = rejected.filter(file => file.size > maxFile);
+    if (tooLarge.length) {
+      const maxMb = Math.floor(maxFile / (1024 * 1024));
+      const { locale, translations } = await requestTranslations(request, env.ASSETS);
+      const files = tooLarge.map(file => ({ name: file.name, size: file.size, maxBytes: maxFile }));
+      const errors = files.map(file => translate(
+        translations,
+        'file_too_large_with_max',
+        '{filename} is too large (max {max_mb}MB)',
+        { filename: file.name, max_mb: maxMb },
+      ));
+      return json({
+        success: false,
+        error: errors.join('\n'),
+        errorKey: 'file_too_large_with_max',
+        errorParams: { filename: files[0].name, max_mb: maxMb },
+        files,
+      }, 413, localeHeaders(locale));
+    }
+    const names = rejected.map(file => file.name);
     return failure(request, env, 400, 'blocked_extension', 'Invalid or blocked filename', {}, { files: names });
   }
+  const files = acceptable.map(file => {
+    const id = crypto.randomUUID();
+    return { id, objectKey: `sessions/${code}/${id}`, name: cleanName(file.name)!, size: file.size, contentType: file.type, expiresAt: Date.now() + ttlMs };
+  });
   const reservation = await command(stub, 'reserve', { files, maxBytes, maxFiles, clientId });
   if (!reservation.data.success) return commandResponse(reservation, request, env);
+  const reserved = (reservation.data.reserved ?? files.map(({ id, name }) => ({ id, name }))) as Array<{ id: string; name: string }>;
+  const acceptedFiles = files.filter(file => reserved.some(entry => entry.id === file.id));
   const written: string[] = [];
   try {
-    for (let i = 0; i < entries.length; i++) {
-      const key = files[i].objectKey;
-      await env.FILES.put(key, entries[i].body, { httpMetadata: { contentType: files[i].contentType } });
-      written.push(key);
+    for (const file of acceptedFiles) {
+      const entry = acceptable.find(candidate => cleanName(candidate.name) === file.name)!;
+      await env.FILES.put(file.objectKey!, entry.body, { httpMetadata: { contentType: entry.type } });
+      written.push(file.objectKey!);
     }
     const uploadedAt = Date.now();
-    const result = await command(stub, 'commit', { files: files.map((f, i) => ({ ...f, objectKey: written[i], uploadedAt, expiresAt: uploadedAt + ttlMs })) });
+    const result = await command(stub, 'commit', { files: acceptedFiles.map(file => ({ ...file, uploadedAt, expiresAt: uploadedAt + ttlMs })) });
     if (!result.data.success) throw new Error('Session metadata commit failed');
-    return json({ success: true, files: files.map(({ id, name }) => ({ id, name })) });
+    const skipped = rejected.length ? { skipped: rejected.map(file => ({ name: file.name, reason: file.size > maxFile ? 'too_large' : 'blocked' })) } : {};
+    return json({ success: true, files: acceptedFiles.map(({ id, name }) => ({ id, name })), ...skipped });
   } catch {
     await Promise.all(written.map(key => env.FILES.delete(key)));
-    await command(stub, 'release', { ids: files.map(file => file.id) });
+    await command(stub, 'release', { ids: acceptedFiles.map(file => file.id) });
     return failure(request, env, 500, 'upload_failed', 'Upload failed');
   }
 }
@@ -315,9 +322,7 @@ async function routeSession(request: Request, env: Env, url: URL, path: string):
   if (path === '/' || path === '') {
     const ip = request.headers.get('cf-connecting-ip') ?? 'unknown';
     if (!await rateLimited(env.SESSION_CREATE_LIMITER, ip)) return failure(request, env, 429, 'connection_refused', 'Too many requests');
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    const code = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-    return Response.redirect(new URL(`/${code}`, url), 302);
+    return Response.redirect(new URL(`/${await uniqueSessionCode(env)}`, url), 302);
   }
   if (isAssetPath(path)) return env.ASSETS.fetch(new Request(new URL(path, url), request));
   // The browser resolves page-relative asset URLs against the session page,
@@ -341,7 +346,7 @@ async function routeSession(request: Request, env: Env, url: URL, path: string):
   if (action === 'heartbeat' && request.method === 'POST') {
     const data = await request.json().catch(() => ({})) as Record<string, unknown>;
     if (typeof data.clientId !== 'string' || !CLIENT_RE.test(data.clientId)) return failure(request, env, 400, 'device_approval_required', 'Invalid client ID');
-    return commandResponse(await command(stub, 'heartbeat', { clientId: data.clientId }), request, env);
+    return commandResponse(await command(stub, 'heartbeat', { clientId: data.clientId, ip: request.headers.get('cf-connecting-ip') ?? 'unknown', userAgent: request.headers.get('user-agent') ?? '' }), request, env);
   }
   if (action === 'approve' && request.method === 'POST') {
     const data = await request.json().catch(() => ({})) as Record<string, unknown>;
