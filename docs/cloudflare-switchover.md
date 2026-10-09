@@ -27,13 +27,18 @@ production approval:
 
 ```sh
 npx wrangler r2 bucket create drop5-files
-npx wrangler r2 bucket lifecycle add drop5-files expire-orphans-after-one-day "" --expire-days 1
+npx wrangler r2 bucket lifecycle set drop5-files --file scripts/r2-lifecycle.json
 npx wrangler r2 bucket lifecycle list drop5-files
 ```
 
-The bucket must stay private. The one-day rule applies to all object prefixes
-and is a safety net for orphaned objects only. Durable Object alarms remain the
-authoritative five-minute deletion mechanism.
+The bucket must stay private. The rules in `scripts/r2-lifecycle.json` apply to
+all object prefixes and are a safety net for orphaned objects only: objects and
+incomplete multipart uploads expire after 10 minutes, one TTL beyond the
+authoritative five-minute Durable Object alarm. Durable Object alarms remain
+the authoritative five-minute deletion mechanism. R2 lifecycle expiration runs
+on a periodic sweep, so actual deletion can lag the 10-minute mark; anything
+still present is unbillable once the sweep removes it, and the free tier covers
+the transient orphans at this service's scale.
 
 If the lifecycle rule already exists, inspect it with `lifecycle list` rather
 than adding a duplicate. To manage the complete lifecycle configuration from a

@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "id": "expire-orphans-fast",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 600 } }
+    },
+    {
+      "id": "abort-stale-multipart-uploads",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": { "condition": { "type": "Age", "maxAge": 600 } }
+    }
+  ]
+}
