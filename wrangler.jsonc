@@ -22,7 +22,7 @@
   ],
   "vars": {
     "BASE_PATH": "/drop5",
-    "MAX_FILE_SIZE": "31457280",
+    "MAX_FILE_SIZE": "104857600",
     "MAX_STORAGE_SIZE": "104857600",
     "MAX_FILES": "30",
     "FILE_TTL_SECONDS": "300",

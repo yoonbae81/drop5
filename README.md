@@ -243,7 +243,7 @@ CrowdSec이 설치되지 않은 환경에서는 해당 외부 보호 기능이 �
 | `BASE_URL`                 | 접속 경로 프리픽스 (예: `/drop5`)            | `/drop5`            |
 | <strong>핵심 공유 정책</strong>         |                                              |                     |
 | `FILE_TIMEOUT`             | 파일 및 세션 유지 시간 (초)                  | `300` (5분)         |
-| `MAX_FILE_SIZE`            | 개별 파일 최대 크기 (Bytes)                  | `31457280` (30MB)   |
+| `MAX_FILE_SIZE`            | 개별 파일 최대 크기 (Bytes)                  | `104857600` (100MB) |
 | `MAX_STORAGE_SIZE`         | 세션당 전시 전체 파일 용량 합계 제한         | `104857600` (100MB) |
 | `MAX_FILES`                | 세션당 최대 파일 개수                        | `30`                |
 | <strong>저장 경로</strong>              |                                              |                     |

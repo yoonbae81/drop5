@@ -57,7 +57,7 @@ Before accepting public traffic:
 - Keep the R2 bucket inaccessible from a public bucket URL.
 - Verify the Worker route is the only public path to downloads.
 - Confirm WAF rules do not block WebSocket upgrades or legitimate multipart
-  uploads up to the configured 30 MB per-file limit.
+  uploads up to the configured 100 MB per-file limit.
 
 ## 4. Deploy and canary
 
