@@ -186,9 +186,16 @@ async function upload(request: Request, env: Env, code: string): Promise<Respons
     const data = await request.json().catch(() => ({})) as { content?: unknown; clientId?: string };
     clientId = data.clientId;
     if (typeof data.content !== 'string' || !data.content.trim()) return failure(request, env, 400, 'enter_content', 'No content provided');
-    const title = data.content.trim().split('\n')[0].slice(0, 10).trim().replace(/[\\/*?:"<>|]/g, '_') || 'text_input';
+    // Text uploads must always land as a .txt file and never trip the
+    // blocked-extension path: sanitize the title, and fall back to a name
+    // that is known to pass cleanName if sanitization is somehow insufficient.
+    const title = data.content.trim().split('\n')[0]
+      .replace(/[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff\u180e]/gu, '')
+      .slice(0, 10).trim().replace(/[\\/*?:"<>|]/g, '_')
+      .replace(/^\.+|\.+$|\.{2,}/g, '_') || 'text_input';
+    const name = cleanName(`${title}.txt`) ?? 'text_input.txt';
     const blob = new Blob([data.content], { type: 'text/plain; charset=utf-8' });
-    entries = [{ name: `${title}.txt`, body: blob.stream(), size: blob.size, type: blob.type }];
+    entries = [{ name, body: blob.stream(), size: blob.size, type: blob.type }];
   } else if (type.includes('multipart/form-data')) {
     const form = await request.formData();
     clientId = form.get('clientId');

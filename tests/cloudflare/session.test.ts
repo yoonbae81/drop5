@@ -119,6 +119,32 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     expect(denied.status).toBe(403);
   });
 
+  it('always stores pasted text as a .txt file that passes the extension check', async () => {
+    expect(await join(hostId)).toMatchObject({ status: 'approved' });
+
+    // Hostile-looking first lines must never produce blocked_extension.
+    const cases: Array<[string, string]> = [
+      ['회의 메모입니다.\n둘째 줄', '회의 메모입니다_.txt'], // trailing period must not yield '..'
+      ['제목 없는 메모\r\n본문', '제목 없는 메모.txt'], // CRLF paste must not keep \r
+      ['report..draft v2\nbody', 'report_dr.txt'], // '..' in title
+      ['...leading dots\nbody', '_leading.txt'], // leading dots
+      ['\ttabbed\tstart\nbody', 'tabbedstar.txt'], // control chars stripped before the 10-char cut
+    ];
+    for (const [content, expected] of cases) {
+      const response = await request(`/${code}/upload`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content, clientId: hostId }),
+      });
+      expect(response.status).toBe(200);
+      const data = await json(response);
+      expect(data.success).toBe(true);
+      expect(data.files).toHaveLength(1);
+      expect(data.files[0].name).toBe(expected);
+      expect(data.files[0].name.endsWith('.txt')).toBe(true);
+    }
+  });
+
   it('normalizes decomposed Unicode filenames to NFC', async () => {
     const form = new FormData();
     form.append('content', new File(['unicode'], 'A\u0301.txt'));
