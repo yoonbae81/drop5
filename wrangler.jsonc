@@ -10,7 +10,7 @@
     "run_worker_first": true
   },
   "r2_buckets": [
-    { "binding": "FILES", "bucket_name": "drop5-files" }
+    { "binding": "FILES", "bucket_name": "drop5" }
   ],
   "durable_objects": {
     "bindings": [

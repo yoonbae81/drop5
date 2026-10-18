@@ -42,16 +42,16 @@ It performs the TypeScript check, Workers-runtime Vitest suite (including i18n, 
 
 ## Cloudflare switchover
 
-The R2 bucket (`drop5-files`) is provisioned and private. The Durable Object alarm is the authoritative five-minute TTL; an R2 lifecycle rule expiring objects and incomplete multipart uploads after 10 minutes is only an orphan-object safety net (R2 sweeps periodically, so deletion can lag slightly; the free tier covers transient orphans). Inspect the rule with:
+The R2 bucket (`drop5`) is provisioned and private. The Durable Object alarm is the authoritative five-minute TTL; an R2 lifecycle rule expiring objects and incomplete multipart uploads after 10 minutes is only an orphan-object safety net (R2 sweeps periodically, so deletion can lag slightly; the free tier covers transient orphans). Inspect the rule with:
 
 ```sh
-npx wrangler r2 bucket lifecycle list drop5-files
+npx wrangler r2 bucket lifecycle list drop5
 ```
 
 The production rule lives in `scripts/r2-lifecycle.json` and can be reapplied with:
 
 ```sh
-npx wrangler r2 bucket lifecycle set drop5-files --file scripts/r2-lifecycle.json
+npx wrangler r2 bucket lifecycle set drop5 --file scripts/r2-lifecycle.json
 ```
 
 These commands mutate the configured Cloudflare account and are **not** part of local setup or validation. Traffic routes to the Worker via the `xcv.kr/drop5*` Workers Route. See [the switchover runbook](docs/cloudflare-switchover.md) and [the architecture/porting guide](docs/cloudflare-porting-guide.md).

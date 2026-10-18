@@ -26,9 +26,9 @@ These commands mutate the selected Cloudflare account and require explicit
 production approval:
 
 ```sh
-npx wrangler r2 bucket create drop5-files
-npx wrangler r2 bucket lifecycle set drop5-files --file scripts/r2-lifecycle.json
-npx wrangler r2 bucket lifecycle list drop5-files
+npx wrangler r2 bucket create drop5 --location apac
+npx wrangler r2 bucket lifecycle set drop5 --file scripts/r2-lifecycle.json
+npx wrangler r2 bucket lifecycle list drop5
 ```
 
 The bucket must stay private. The rules in `scripts/r2-lifecycle.json` apply to
@@ -45,7 +45,7 @@ than adding a duplicate. To manage the complete lifecycle configuration from a
 reviewed JSON file, use:
 
 ```sh
-npx wrangler r2 bucket lifecycle set drop5-files < lifecycle.json
+npx wrangler r2 bucket lifecycle set drop5 < lifecycle.json
 ```
 
 ## 3. Edge controls
