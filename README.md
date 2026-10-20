@@ -19,7 +19,9 @@ The Worker supports a deployment prefix via the `BASE_PATH` environment variable
 
 The UI locale is negotiated once from `Accept-Language` by the Worker, and the browser loads only the selected locale JSON plus English as the per-key fallback. The same locale is used for structured API errors.
 
-`SESSION_TTL_SECONDS` controls the sliding idle lifetime of a fileless session (default: 300 seconds). Session activity refreshes that deadline, file deadlines are never shortened by it, and the Durable Object alarm removes all persisted session state when the session is abandoned or its final file expires.
+`SESSION_TTL_SECONDS` controls the sliding idle lifetime of a fileless session (default: 300 seconds). Session activity refreshes that deadline, file deadlines are never shortened by it, and the Durable Object alarm removes all persisted session state when the session is abandoned or its final file expires. Session TTL and file expiry are independent: file deadlines always win in `expiresAt` (the session lives at least as long as its files), while an idle session with no files dies on `SESSION_TTL_SECONDS` alone.
+
+WebSocket notifications use the Durable Object Hibernation API in an event-driven mode: while any client socket is connected there is **no periodic keepalive alarm** — connected sockets are authoritative presence, keeping an expired session alive and protecting its clients from stale-heartbeat pruning. Cleanup is armed only by the **last** socket's disconnect event, which schedules a purge after `DISCONNECT_GRACE_SECONDS` (default: 60, optional var in `wrangler.jsonc`). Session purge closes all connected sockets with code 1001 so clients reconnect instead of hanging on a dead session.
 
 ### Rate limiting
 

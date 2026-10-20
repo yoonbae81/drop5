@@ -12,8 +12,8 @@ interface StoredFile {
   reservationExpiresAt?: number;
 }
 interface Client { status: 'approved' | 'pending' | 'rejected'; joinedAt: number; lastSeen: number; userAgent: string; ip?: string }
-interface State { createdAt: number; expiresAt: number; clients: Record<string, Client>; hostId: string | null; files: StoredFile[]; trustedIps?: Record<string, number> }
-interface Env { FILES: R2Bucket; SESSION_TTL_SECONDS?: string }
+interface State { createdAt: number; expiresAt: number; clients: Record<string, Client>; hostId: string | null; files: StoredFile[]; trustedIps?: Record<string, number>; graceUntil?: number }
+interface Env { FILES: R2Bucket; SESSION_TTL_SECONDS?: string; DISCONNECT_GRACE_SECONDS?: string }
 
 export class Session extends DurableObject<Env> {
   private data: State | null = null;
@@ -33,7 +33,7 @@ export class Session extends DurableObject<Env> {
     this.dataIsStored = !!stored;
     return data;
   }
-  private async save(): Promise<void> { await this.ctx.storage.put('state', this.data); }
+  private async save(): Promise<void> { await this.ctx.storage.put('state', this.data); this.dataIsStored = true; }
   private async approved(clientId: unknown): Promise<boolean> {
     if (typeof clientId !== 'string') return false;
     const state = await this.load();
@@ -49,7 +49,11 @@ export class Session extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    if (new URL(request.url).pathname === '/_ws') return this.websocket(request);
+    if (new URL(request.url).pathname === '/_ws') {
+      // WebSocket acceptance shares the exclusive() queue with command ops so
+      // it can never interleave with (e.g.) a purge or approval state change.
+      return this.exclusive(() => this.websocket(request));
+    }
     return this.exclusive(() => this.commandRequest(request));
   }
 
@@ -109,7 +113,10 @@ export class Session extends DurableObject<Env> {
       }
       case 'heartbeat': {
         for (const [id, client] of Object.entries(state.clients)) {
-          if (now - client.lastSeen > 300_000) delete state.clients[id];
+          // Hibernation-API presence: a client with a connected (possibly
+          // hibernated) socket is authoritative and must not be pruned even
+          // when its heartbeat is stale.
+          if (now - client.lastSeen > 300_000 && this.ctx.getWebSockets(id).length === 0) delete state.clients[id];
         }
         if (!state.clients[state.hostId ?? '']) state.hostId = null;
         const client = state.clients[input.clientId];
@@ -241,8 +248,27 @@ export class Session extends DurableObject<Env> {
   async alarm(): Promise<void> {
     await this.exclusive(async () => {
       const state = await this.load();
-      if (state.expiresAt <= Date.now()) await this.purgeSession(state);
-      else await this.expireFiles();
+      const now = Date.now();
+      const connected = this.ctx.getWebSockets().length > 0;
+      if (!connected && state.graceUntil) {
+        // Disconnected grace window: files still expire on schedule, but the
+        // session purge waits until the grace elapses.
+        if (now >= state.graceUntil) { await this.purgeSession(state); return; }
+        await this.expireFiles();
+        return;
+      }
+      if (state.expiresAt > now) { await this.expireFiles(); return; }
+      // Hibernation-API presence: connected sockets are authoritative, so an
+      // expired session with live sockets is refreshed instead of purged.
+      if (connected) {
+        this.refreshSession(state, now);
+        await this.save();
+        // Event-driven mode: no periodic keepalive alarm while connected;
+        // cleanup is re-armed by the last socket's disconnect event.
+        await this.ctx.storage.deleteAlarm();
+        return;
+      }
+      await this.purgeSession(state);
     });
   }
 
@@ -253,13 +279,17 @@ export class Session extends DurableObject<Env> {
     const seconds = Number(this.env.SESSION_TTL_SECONDS ?? 300);
     return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 300_000;
   }
+  private disconnectGraceMs(): number {
+    const seconds = Number(this.env.DISCONNECT_GRACE_SECONDS ?? 60);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 60_000;
+  }
   private refreshSession(state: State, now = Date.now()): void {
     const fileDeadline = Math.max(...state.files.map(file => file.reservation ? file.reservationExpiresAt ?? file.expiresAt : file.expiresAt), 0);
     state.expiresAt = Math.max(now + this.sessionTtlMs(), fileDeadline);
   }
   private async scheduleAlarm(): Promise<void> {
     const state = await this.load();
-    const next = Math.min(state.expiresAt, ...state.files.map(file => file.reservation ? file.reservationExpiresAt ?? file.expiresAt : file.expiresAt));
+    const next = Math.min(state.expiresAt, state.graceUntil ?? Infinity, ...state.files.map(file => file.reservation ? file.reservationExpiresAt ?? file.expiresAt : file.expiresAt));
     if (Number.isFinite(next)) await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, next));
     else await this.ctx.storage.deleteAlarm();
   }
@@ -268,6 +298,11 @@ export class Session extends DurableObject<Env> {
     await this.ctx.storage.deleteAll();
     await this.ctx.storage.deleteAlarm();
     this.data = null;
+    // The session no longer exists: actively close any sockets (1001 Going
+    // Away) so clients reconnect instead of hanging on a dead session.
+    for (const socket of this.ctx.getWebSockets()) {
+      try { socket.close(1001, 'Session ended'); } catch { /* already closing */ }
+    }
   }
   private async expireFiles(): Promise<boolean> {
     const state = await this.load(); const now = Date.now();
@@ -290,6 +325,7 @@ export class Session extends DurableObject<Env> {
     const pair = new WebSocketPair(); const client = pair[0]; const server = pair[1];
     this.ctx.acceptWebSocket(server, [clientId!]);
     server.serializeAttachment({ clientId, connectedAt: Date.now() });
+    if (this.data) delete this.data.graceUntil;
     server.send(JSON.stringify({ type: 'connected' }));
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -297,7 +333,21 @@ export class Session extends DurableObject<Env> {
     if (typeof message !== 'string') return;
     try { const data = JSON.parse(message); if (data.type === 'ping') socket.send(JSON.stringify({ type: 'pong', at: Date.now() })); } catch { /* Ignore malformed client events. */ }
   }
-  webSocketClose(): void {}
+  webSocketClose(): void {
+    void this.exclusive(async () => {
+      // Only the LAST disconnect arms cleanup; any remaining socket (presence)
+      // keeps the session in event-driven mode with no timer at all.
+      if (this.ctx.getWebSockets().length > 0) return;
+      const state = await this.load();
+      // A socket closed by purgeSession(): load() synthesized a fresh state
+      // that was never stored — do not resurrect the session here.
+      if (!this.dataIsStored) return;
+      const now = Date.now();
+      state.graceUntil = now + this.disconnectGraceMs();
+      await this.save();
+      await this.ctx.storage.setAlarm(Math.max(now + 1000, state.graceUntil));
+    });
+  }
   webSocketError(): void {}
   private broadcast(message: unknown): void {
     const payload = JSON.stringify(message);

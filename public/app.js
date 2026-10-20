@@ -48,7 +48,10 @@
 
   let isApproved = false;
   let pendingRequests = [];
-  let pollingInterval = null;
+  let pollTimer = null;
+  let pollBackoffMs = 4000;
+  const FALLBACK_POLL_MAX_MS = 30000;
+  let pollInFlight = false;
   let lastSyncHash = '';
   let isUploading = false;
 
@@ -257,7 +260,21 @@
   document.querySelectorAll('#approvalModal .btn-reject').forEach(btn => btn.addEventListener('click', () => handleApprovalDecision('reject')));
 
   function applyPendingRequests(pending) {
-    pendingRequests = pending || [];
+    const incoming = pending || [];
+    // Reconcile by clientId: never duplicate an approval-modal entry that a
+    // WebSocket event already added, and drop entries the server no longer
+    // reports as pending (already approved, rejected, or removed).
+    const pendingIds = new Set(incoming.map(req => req.clientId));
+    if (incoming.length > 0) {
+      pendingRequests = pendingRequests.filter(req => pendingIds.has(req.clientId));
+      const known = new Set(pendingRequests.map(req => req.clientId));
+      for (const req of incoming) {
+        if (!known.has(req.clientId)) {
+          pendingRequests.push(req);
+          known.add(req.clientId);
+        }
+      }
+    }
     if (isApproved && pendingRequests.length > 0) showApprovalModal();
     else hideApprovalModal();
   }
@@ -273,7 +290,6 @@
       if (data.success) {
         updateSessionState(data.status);
         applyPendingRequests(data.pending_requests);
-        startPolling();
         connectWebSocket();
       } else {
         console.error('Join failed:', data.error);
@@ -283,17 +299,32 @@
     }
   }
 
-  function startPolling() {
-    if (pollingInterval) clearTimeout(pollingInterval);
-    pollSessionLoop();
+  // --- Fallback polling (ONLY while the WebSocket is not open) ---
+  // When the socket is down, a slow bounded exponential poll keeps state
+  // roughly fresh. When the socket is open, updates are event-driven and no
+  // periodic HTTP heartbeat/files traffic runs at all.
+
+  function stopFallbackPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
   }
 
-  async function pollSessionLoop() {
-    if (!isUploading) await pollSessionState();
-    pollingInterval = setTimeout(pollSessionLoop, 4000);
+  function startFallbackPolling() {
+    if (webSocket) return;
+    stopFallbackPolling();
+    pollLoop();
+  }
+
+  async function pollLoop() {
+    if (webSocket) return;
+    await pollSessionState();
+    if (webSocket) return; // socket came back while the request was in flight
+    pollTimer = setTimeout(pollLoop, pollBackoffMs);
+    pollBackoffMs = Math.min(pollBackoffMs * 2, FALLBACK_POLL_MAX_MS);
   }
 
   async function pollSessionState() {
+    if (pollInFlight) return;
+    pollInFlight = true;
     try {
       const response = await fetch(`${apiUrl()}/heartbeat`, {
         method: 'POST',
@@ -308,22 +339,105 @@
       }
     } catch (error) {
       console.error('Polling error:', error);
+    } finally {
+      pollInFlight = false;
     }
   }
 
-  // WebSocket for real-time notifications (hibernation-aware on the server)
+  // --- WebSocket: the event-driven path ---
+  // Lifecycle: one socket at a time, one reconnect timer at a time, a timeout
+  // for sockets stuck in CONNECTING, and stale sockets from a previous
+  // generation can never schedule reconnects or apply updates.
+
   let webSocket = null;
-  let webSocketBackoff = 2000;
+  let webSocketBackoffMs = 2000;
+  const WEB_SOCKET_BACKOFF_MAX_MS = 30000;
+  const CONNECT_TIMEOUT_MS = 15000;
+  let reconnectTimer = null;
+  let connectTimer = null;
+  let socketGeneration = 0;
+  let connectSyncInFlight = false;
+
+  function clearReconnectTimer() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function clearConnectTimer() {
+    if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+  }
+
+  // One synchronization per connection: refresh approval status / pending
+  // requests, then pull the initial-or-reconnect file snapshot.
+  async function synchronizeOnConnect() {
+    if (connectSyncInFlight) return;
+    connectSyncInFlight = true;
+    try {
+      const response = await fetch(`${apiUrl()}/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: CLIENT_ID }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateSessionState(data.status);
+        applyPendingRequests(data.pending_requests);
+      }
+    } catch (error) {
+      console.error('Socket sync error:', error);
+    }
+    // Force a fresh render: the list may have changed while disconnected.
+    lastSyncHash = '';
+    await syncFiles();
+    connectSyncInFlight = false;
+  }
+
+  function handleSocketDown() {
+    if (webSocket) {
+      webSocket = null;
+      clearConnectTimer();
+      // Slow bounded fallback polling covers the disconnected window.
+      startFallbackPolling();
+      // Exactly one reconnect timer may be pending at any time.
+      clearReconnectTimer();
+      reconnectTimer = setTimeout(connectWebSocket, webSocketBackoffMs);
+      webSocketBackoffMs = Math.min(webSocketBackoffMs * 2, WEB_SOCKET_BACKOFF_MAX_MS);
+    }
+  }
+
   function connectWebSocket() {
+    if (webSocket) return;
+    clearReconnectTimer();
+    const generation = ++socketGeneration;
     try {
       const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      webSocket = new WebSocket(`${scheme}//${location.host}${apiUrl()}/ws?clientId=${encodeURIComponent(CLIENT_ID)}`);
-      webSocket.onmessage = async event => {
-        webSocketBackoff = 2000;
+      const socket = new WebSocket(`${scheme}//${location.host}${apiUrl()}/ws?clientId=${encodeURIComponent(CLIENT_ID)}`);
+      webSocket = socket;
+      const isCurrent = () => webSocket === socket && generation === socketGeneration;
+      // A socket stuck in CONNECTING must not stall the session forever.
+      clearConnectTimer();
+      connectTimer = setTimeout(() => {
+        if (webSocket === socket && socket.readyState === 0) {
+          try { socket.close(); } catch { /* already dead */ }
+        }
+      }, CONNECT_TIMEOUT_MS);
+      socket.onopen = () => {
+        if (!isCurrent()) return;
+        clearConnectTimer();
+        webSocketBackoffMs = 2000;
+        pollBackoffMs = 4000;
+        // Event-driven from here: no periodic polling while the socket is open.
+        stopFallbackPolling();
+        synchronizeOnConnect();
+      };
+      socket.onmessage = async event => {
+        if (!isCurrent()) return; // stale event from a previous socket
+        webSocketBackoffMs = 2000;
         const message = JSON.parse(event.data);
         if (message.type === 'client-joined' && isApproved) {
-          pendingRequests.push(message.client);
-          showApprovalModal();
+          if (!pendingRequests.some(req => req.clientId === message.client.clientId)) {
+            pendingRequests.push(message.client);
+            showApprovalModal();
+          }
         }
         if (message.type === 'client-approved' && message.clientId === CLIENT_ID) {
           updateSessionState('approved');
@@ -334,11 +448,41 @@
         }
         if (['file-uploaded', 'file-deleted', 'file-expired'].includes(message.type) && isApproved) syncFiles();
       };
-      webSocket.onclose = () => {
-        setTimeout(connectWebSocket, webSocketBackoff);
-        webSocketBackoff = Math.min(webSocketBackoff * 2, 30000);
+      socket.onclose = () => {
+        if (webSocket !== socket) return; // superseded socket: no stale reconnect
+        handleSocketDown();
       };
-    } catch { /* Polling keeps the session alive without WebSockets. */ }
+      socket.onerror = () => { /* onclose fires for real failures. */ };
+    } catch {
+      // Polling keeps the session alive without WebSockets.
+      handleSocketDown();
+    }
+  }
+
+  // Visibility and connectivity changes drive immediate reconnection attempts
+  // instead of waiting out the backoff.
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !webSocket) {
+        webSocketBackoffMs = 2000;
+        pollBackoffMs = 4000;
+        connectWebSocket();
+      }
+    });
+  }
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('offline', () => {
+      // Going offline: cancel pending reconnects and paused-interval polling.
+      clearReconnectTimer();
+      stopFallbackPolling();
+    });
+    window.addEventListener('online', () => {
+      if (!webSocket) {
+        webSocketBackoffMs = 2000;
+        pollBackoffMs = 4000;
+        connectWebSocket();
+      }
+    });
   }
 
   // --- Files ---
