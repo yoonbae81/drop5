@@ -913,7 +913,7 @@ def upload_text(code):
         # Sanitize base name to remove problematic characters for filenames
         filename_base = re.sub(r'[\\/*?:"<>|]', '_', filename_base)
         
-        target_filename = f"{filename_base}.txt"
+        target_filename = f"{filename_base}.md"
         normalized_filename = normalize_filename(target_filename)
         if not normalized_filename:
             return {'success': False, 'error': 'Invalid filename'}
@@ -928,7 +928,7 @@ def upload_text(code):
                 # Generate a unique filename
                 counter = 1
                 while True:
-                    new_filename = f"{filename_base} ({counter}).txt"
+                    new_filename = f"{filename_base} ({counter}).md"
                     normalized_new = normalize_filename(new_filename)
                     if not normalized_new:
                         return {'success': False, 'error': 'Invalid filename'}

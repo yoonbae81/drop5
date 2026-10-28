@@ -126,7 +126,8 @@ class TestUploadRouting(unittest.TestCase):
                 result = main.upload_file('session')
 
             self.assertEqual(result['success'], True)
-            with open(os.path.join(upload_dir, 'session', 'shortcut t.txt'), 'r', encoding='utf-8') as saved_file:
+            self.assertEqual(os.listdir(os.path.join(upload_dir, 'session')), ['shortcut t.md'])
+            with open(os.path.join(upload_dir, 'session', 'shortcut t.md'), 'r', encoding='utf-8') as saved_file:
                 self.assertEqual(saved_file.read(), 'shortcut text')
 
 

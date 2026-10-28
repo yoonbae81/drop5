@@ -119,16 +119,16 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
     expect(denied.status).toBe(403);
   });
 
-  it('always stores pasted text as a .txt file that passes the extension check', async () => {
+  it('always stores pasted text as a .md file that passes the extension check', async () => {
     expect(await join(hostId)).toMatchObject({ status: 'approved' });
 
     // Hostile-looking first lines must never produce blocked_extension.
     const cases: Array<[string, string]> = [
-      ['회의 메모입니다.\n둘째 줄', '회의 메모입니다_.txt'], // trailing period must not yield '..'
-      ['제목 없는 메모\r\n본문', '제목 없는 메모.txt'], // CRLF paste must not keep \r
-      ['report..draft v2\nbody', 'report_dr.txt'], // '..' in title
-      ['...leading dots\nbody', '_leading.txt'], // leading dots
-      ['\ttabbed\tstart\nbody', 'tabbedstar.txt'], // control chars stripped before the 10-char cut
+      ['회의 메모입니다.\n둘째 줄', '회의 메모입니다_.md'], // trailing period must not yield '..'
+      ['제목 없는 메모\r\n본문', '제목 없는 메모.md'], // CRLF paste must not keep \r
+      ['report..draft v2\nbody', 'report_dr.md'], // '..' in title
+      ['...leading dots\nbody', '_leading.md'], // leading dots
+      ['\ttabbed\tstart\nbody', 'tabbedstar.md'], // control chars stripped before the 10-char cut
     ];
     for (const [content, expected] of cases) {
       const response = await request(`/${code}/upload`, {
@@ -141,7 +141,11 @@ describe('Cloudflare HTTP and Durable Object integration', () => {
       expect(data.success).toBe(true);
       expect(data.files).toHaveLength(1);
       expect(data.files[0].name).toBe(expected);
-      expect(data.files[0].name.endsWith('.txt')).toBe(true);
+      expect(data.files[0].name.endsWith('.md')).toBe(true);
+      const download = await request(`/${code}/download/${data.files[0].id}?clientId=${hostId}`);
+      expect(download.status).toBe(200);
+      expect(download.headers.get('content-type')).toBe('text/markdown; charset=utf-8');
+      expect(await download.text()).toBe(content);
     }
   });
 
